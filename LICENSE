@@ -1,0 +1,56 @@
+tempr — Binary Licence for Non-Commercial Use
+
+Copyright (c) 2026 Michael Keenan. All rights reserved.
+
+1. GRANT
+
+   The copyright holder grants you a non-exclusive, non-transferable,
+   royalty-free licence to use, copy and distribute the compiled binary
+   forms of this software, and to use the public C header file
+   (include/tempr.h) solely for the purpose of compiling programs that
+   link against those binaries, subject to the conditions below.
+
+2. NON-COMMERCIAL USE ONLY
+
+   You may use and distribute the software only for non-commercial
+   purposes.  "Commercial purpose" means any activity primarily intended
+   for or directed toward commercial advantage or monetary compensation,
+   including but not limited to: incorporating the software into a
+   product or service offered for sale, using it in production systems
+   that generate revenue, or providing it as part of a paid consulting
+   engagement.
+
+   If you wish to use this software commercially, contact the copyright
+   holder to negotiate a separate licence.
+
+3. SOURCE CODE
+
+   The source code of this software is not licensed for redistribution.
+   You may not publish, distribute, sublicense or otherwise make
+   available the source code or any derivative works of it without the
+   prior written consent of the copyright holder.
+
+4. MODIFICATIONS
+
+   You may not modify the binary or header files and redistribute the
+   modified versions.  You may create programs that link against the
+   unmodified binaries and header, and distribute those programs under
+   your own terms, provided the binary licence terms above are preserved
+   for the tempr components.
+
+5. ATTRIBUTION
+
+   Redistributions of the binary must retain this licence file and the
+   copyright notice.  You may not use the name "tempr" or the copyright
+   holder's name to endorse products built with this software without
+   prior written permission.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT.  IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
