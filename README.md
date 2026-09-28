@@ -8,9 +8,9 @@
 Send it events, define views, and tempr keeps calculations up to date incrementally—even when events arrive late, are amended, or are retracted. You can also reconstruct historical answers within retained coverage to ask what the system knew at any previous point in time.
 
 - **Zero External Dependencies:** Self-contained C11 library and CLI. No runtime daemons, no background threads, no network ports.
-- **Incremental Maintenance:** Maintains running VWAPs, rolling metrics, and multi-view aggregations in nanoseconds rather than recalculating full history.
+- **Incremental Maintenance:** Maintains running VWAPs, rolling metrics, and multi-view aggregations by applying each change instead of recalculating from scratch.
 - **Bi-Temporal Point-in-Time Auditing:** Reconstruct prior answers as they were known at any historical timestamp or commit (`at T known_at K`).
-- **Streaming As-Of Joins:** Joins high-frequency trades to prevailing quotes with bounded memory and automatic revision cascades.
+- **Streaming As-Of Joins:** Joins high-frequency trades to prevailing quotes and re-matches only the trades a late or corrected quote affects.
 - **Durable Persistence:** Write-Ahead Log (WAL) with group commit, snapshots, checkpoints, and crash recovery.
 
 ---
@@ -24,21 +24,21 @@ Full guides, API specifications, and interactive simulators are available on the
 - [Overview & Workflow Integrations](https://mkeenan-kdb.github.io/tempr/#doc/00-introduction)
 - [Build Your First System (CLI Walkthrough)](https://mkeenan-kdb.github.io/tempr/#doc/first-system)
 - [C API Reference & Declarations](https://mkeenan-kdb.github.io/tempr/#doc/05-c-api-reference)
-- [Interactive Time-Travel Demo](https://mkeenan-kdb.github.io/tempr/#explorer)
+- [Time-Travel Demo (answers computed by the engine)](https://mkeenan-kdb.github.io/tempr/#explorer)
 - [Cross-Engine Benchmarks](https://mkeenan-kdb.github.io/tempr/#doc/08-benchmarks)
 
 ---
 
 ## Performance at a Glance
 
-Recorded on an Apple M2 (100,000 Binance ETHBTC trades, batches of 500, median of 3 runs):
+Recorded on an Apple M2. VWAP rows: 100,000 Binance ETHBTC trades in batches of 500, median of 3 runs. Join row: one run of 2.5M operations in batches of 1,000.
 
 | Mode | Throughput / Latency | Description |
 | --- | ---: | --- |
 | **Maintained VWAP** | **11,679,514 ops/sec** | Append-only streaming aggregation |
 | **Corrections & Retractions** | **9,627,166 ops/sec** | Mixed stream with amendments and deletes |
-| **Durable Group Commit** | **2,527,678 ops/sec** | ACID durability to disk (1 MB group commit) |
-| **Streaming As-Of Join** | **0.065 sec** | 253,754 ops (quotes + trades + late data) |
+| **Durable Group Commit** | **2,527,678 ops/sec** | Flushed to the device before acknowledging (1 MB group commit) |
+| **Maintained As-Of Join** | **1.03 sec** | 2.5M quotes, trades, corrections and deletes; kdb+ took 48.6 s, SQLite 6.8 s |
 
 *See [Benchmarks](https://mkeenan-kdb.github.io/tempr/#doc/08-benchmarks) for complete methodology, hardware configuration, and comparisons against kdb+, DuckDB, SQLite, Polars, and pandas.*
 
@@ -135,7 +135,7 @@ as known before the correction: 200.00
 
 ## Architectural Workflows
 
-1. **Embedded In-Process Analytics (C / C++):** Link `libtempr.a` directly into your order router or feed handler for sub-microsecond event processing without network hops or serialization overhead.
+1. **Embedded In-Process Analytics (C / C++):** Link `libtempr.a` directly into your order router or feed handler and process events without network hops or serialization.
 2. **Streaming Event Enrichment (As-Of Joins):** Match trades with asynchronous quote streams as-of execution time, handling amendments and busts automatically.
 3. **UNIX Pipeline / Microservice:** Stream newline-delimited statements into `tempr --data ./store` from Kafka, Python, or shell scripts.
 
