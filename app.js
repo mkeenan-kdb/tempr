@@ -805,6 +805,7 @@ correct trades 1 rev 1 {px: 105}`
     // Render markdown article
     const article = document.getElementById('docArticle');
     article.innerHTML = parseMarkdown(doc.content);
+    article.classList.toggle('api-ref', Boolean(doc.symbols));
     document.title = `${doc.title} · tempr reference`;
     if (doc.symbols) {
       const list = document.createElement('div');
@@ -814,26 +815,6 @@ correct trades 1 rev 1 {px: 105}`
         link.href = `#doc/${doc.id}#${symbol}`;
         link.textContent = symbol;
         list.appendChild(link);
-        // Mark the declaration inside the header excerpt, not a second copy.
-        for (const code of article.querySelectorAll('pre code')) {
-          const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
-          let textNode;
-          let found = false;
-          while ((textNode = walker.nextNode())) {
-            const at = textNode.textContent === symbol ? 0 : textNode.textContent.indexOf(symbol + '(');
-            if (at < 0) continue;
-            const range = document.createRange();
-            range.setStart(textNode, at);
-            range.setEnd(textNode, at + symbol.length);
-            const mark = document.createElement('span');
-            mark.id = symbol;
-            mark.className = 'symbol-target';
-            range.surroundContents(mark);
-            found = true;
-            break;
-          }
-          if (found) break;
-        }
       }
       article.querySelector('h1').after(list);
     }

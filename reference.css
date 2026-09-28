@@ -116,3 +116,16 @@ a.nav-tab { text-decoration: none; }
 .benchmark-highlights span { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .benchmark-highlights a:hover { border-color: var(--accent-cyan); }
 @media (max-width: 580px) { .benchmark-highlights { grid-template-columns: 1fr; } .benchmark-highlights a { flex-direction: row; align-items: center; gap: 20px; } }
+
+/* C API pages: one entry per declaration, generated from tempr.h. */
+.api-ref h3 { font: 600 15px var(--font-mono); letter-spacing: 0; margin: 36px 0 4px; padding-top: 24px; border-top: 1px solid var(--border-subtle); color: var(--text-primary); }
+.api-ref h3:target { color: var(--accent-cyan); }
+.api-kind { font: 10px var(--font-mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+.api-ref .code-block-wrapper { margin: 10px 0 0; }
+.api-ref .code-header { position: absolute; top: 6px; right: 6px; padding: 0; background: none; border: 0; }
+.api-ref .code-header span { display: none; }
+.api-ref .copy-btn { opacity: 0; background: var(--code-bg); }
+.api-ref .code-block-wrapper:hover .copy-btn, .api-ref .copy-btn:focus-visible { opacity: 1; }
+.api-ref pre.code-content { padding: 12px 16px; }
+.api-ref p { margin-bottom: 8px; }
+.markdown-body.api-ref h3 code { background: none; border: 0; padding: 0; font-size: inherit; }
