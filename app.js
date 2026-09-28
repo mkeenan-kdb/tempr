@@ -1000,7 +1000,6 @@ correct trades 1 rev 1 {px: 105}`
       updateExplorerStep(currentExplorerStep);
     } else if (viewName === 'playground') {
       document.getElementById('viewPlayground').classList.add('active');
-      document.getElementById('tabPlayground').classList.add('active');
       loadPlaygroundSample('worked_example');
     }
   }
@@ -1464,9 +1463,6 @@ AAPL 2      1         5
     });
     document.getElementById('tabExplorer').addEventListener('click', () => {
       location.hash = '#explorer';
-    });
-    document.getElementById('tabPlayground').addEventListener('click', () => {
-      location.hash = '#playground';
     });
 
     // Mobile Sidebar Toggle
