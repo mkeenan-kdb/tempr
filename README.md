@@ -4,7 +4,6 @@
 
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/mkeenan-kdb/tempr/releases)
 [![Docs](https://img.shields.io/badge/docs-reference-emerald.svg)](https://mkeenan-kdb.github.io/tempr/)
-[![License](https://img.shields.io/badge/license-Non--Commercial-orange.svg)](LICENSE)
 
 Send it events, define views, and tempr keeps calculations up to date incrementally—even when events arrive late, are amended, or are retracted. You can also reconstruct historical answers within retained coverage to ask what the system knew at any previous point in time.
 
@@ -25,7 +24,7 @@ Full guides, API specifications, and interactive simulators are available on the
 - [Overview & Workflow Integrations](https://mkeenan-kdb.github.io/tempr/#doc/00-introduction)
 - [Build Your First System (CLI Walkthrough)](https://mkeenan-kdb.github.io/tempr/#doc/first-system)
 - [C API Reference & Declarations](https://mkeenan-kdb.github.io/tempr/#doc/05-c-api-reference)
-- [Interactive Time-Travel Simulator](https://mkeenan-kdb.github.io/tempr/#viewExplorer)
+- [Interactive Time-Travel Demo](https://mkeenan-kdb.github.io/tempr/#explorer)
 - [Cross-Engine Benchmarks](https://mkeenan-kdb.github.io/tempr/#doc/08-benchmarks)
 
 ---
@@ -142,6 +141,6 @@ as known before the correction: 200.00
 
 ---
 
-## License
+## Status
 
-Non-commercial binary distribution is permitted under the terms of the [LICENSE](LICENSE). Source redistribution is not licensed. For commercial licensing and deployment support, contact Michael Keenan (michael18ball@gmail.com).
+Experimental. Binaries are shared for people to try, as-is. Feedback and bug reports are welcome via [issues](https://github.com/mkeenan-kdb/tempr/issues).
