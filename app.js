@@ -370,7 +370,6 @@ correct trades 1 rev 1 {px: 105}`
     const T = TT.eventTimes[tt.t];
     const K = ttKnown(tt.k);
     const answer = TT.grid[`${tt.k}|${T}`];
-    const lastT = TT.eventTimes[TT.eventTimes.length - 1];
     const rows = TT.commits.length + 2; // before-anything row, commits, refused commit
 
     // Plot geometry: event time left to right, knowledge time top to bottom. The SVG is
@@ -383,7 +382,7 @@ correct trades 1 rev 1 {px: 105}`
     const plotSvg = () => {
     let svg = `<svg class="tt-plot" width="${W}" height="${y(rows)}" viewBox="0 0 ${W} ${y(rows)}" role="img" tabindex="0"
       aria-label="Trade versions by event time and knowledge time. Use arrow keys to move the query point.">
-      <text class="tt-axis" x="${W - 12}" y="18" text-anchor="end">EVENT TIME →</text>`;
+      ${W < 520 ? '' : `<text class="tt-axis" x="${W - 12}" y="18" text-anchor="end">EVENT TIME →</text>`}`;
     for (let r = 0; r < rows; r++) {
       const cls = r === tt.k ? 'tt-band selected' : r === rows - 1 ? 'tt-band refused' : 'tt-band';
       svg += `<rect class="${cls}" x="0" y="${y(r)}" width="${W}" height="${RH}" data-row="${r}"/>`;
@@ -403,14 +402,50 @@ correct trades 1 rev 1 {px: 105}`
     return svg + '</svg>';
     };
 
-    const labels = [{ known: TT.before, caption: 'Nothing committed yet' }, ...TT.commits].map((c, r) => {
-      const live = TT.grid[`${r}|${lastT}`];
-      const value = live && live.value !== undefined ? ttFmt(live.value) : '—';
-      return `<button class="tt-row${r === tt.k ? ' selected' : ''}" data-row="${r}" title="${escapeHtml(c.statement || '')}">
-        <span class="tt-seq">${r ? '@' + r : ''}</span><span class="tt-known">${c.known}</span>
-        <span class="tt-caption">${escapeHtml(c.caption)}</span><span class="tt-live">${value}</span></button>`;
-    }).join('') + `<div class="tt-row refused" title="${escapeHtml(TT.rejected.statement)}"><span class="tt-seq">✕</span>
-      <span class="tt-known">${TT.rejected.known}</span><span class="tt-caption">${escapeHtml(TT.rejected.caption)}: <code>${TT.rejected.error}</code></span><span class="tt-live"></span></div>`;
+    const steps = [{ known: TT.before, caption: 'Nothing committed yet', statement: '' }, ...TT.commits];
+    const labels = steps.map((c, r) => {
+      const live = TT.states[r].view;
+      const value = live.value !== undefined ? ttFmt(live.value) : '—';
+      return `<button class="tt-row${r === tt.k ? ' selected' : ''}" data-row="${r}" title="${escapeHtml(c.caption)}">
+        <span class="tt-seq">${r ? '@' + r : ''}</span><span class="tt-known">${c.known}</span><span class="tt-live">${value}</span></button>`;
+    }).join('') + `<div class="tt-row refused" title="${escapeHtml(TT.rejected.caption)}"><span class="tt-seq">✕</span>
+      <span class="tt-known">${TT.rejected.known}</span><span class="tt-live">refused</span></div>`;
+
+    // Commit stepper, coordinates and the store/view panels describe the state after commit K.
+    const clock = iso => (iso && iso !== 'none' ? iso.slice(11, 19) : '—');
+    const stepTitle = c => {
+      const op = c.op;
+      if (!op) return c.statement ? 'Advance watermark' : 'Initial state';
+      return { new: 'Insert trade', correct: 'Correct trade', delete: 'Delete trade' }[op[0]] + ` #${op[1]}`;
+    };
+    // Late: an earlier commit already inserted a trade with a later event time.
+    const isLate = (op, r) => TT.commits.slice(0, r - 1).some(p => p.op && p.op[0] === 'new' && p.op[2] > op[2]);
+    const stepMeta = (c, r) => {
+      const op = c.op;
+      const what = !op ? (c.statement ? `watermark → ${c.statement.split(' ').pop()}` : 'ready')
+        : op[0] === 'new' ? `AAPL ${op[4]} @ ${op[3]}${isLate(op, r) ? ' · late' : ''}`
+          : op[0] === 'correct' ? `price → ${op[2]}` : 'retract';
+      return `${c.known} • ${what}`;
+    };
+    const stepper = steps.map((c, r) => `<button class="step-card${r === tt.k ? ' active' : ''}" data-row="${r}" aria-pressed="${r === tt.k}">
+        <span class="step-num">C${r}</span><span class="step-title">${stepTitle(c)}</span><span class="step-meta">${escapeHtml(stepMeta(c, r))}</span></button>`).join('')
+      + `<div class="step-card refused" title="${escapeHtml(TT.rejected.statement)}"><span class="step-num">✕</span>
+        <span class="step-title">Late correction</span><span class="step-meta">${TT.rejected.known} • ${TT.rejected.error}</span></div>`;
+    const state = TT.states[tt.k];
+    const badge = { open: ['OPEN', 'badge-open'], revision_open: ['REVISION OPEN', 'badge-revision'], sealed: ['SEALED', 'badge-sealed'] }[state.window];
+    const coords = `<div class="coord-box"><span class="coord-label">Evaluation cursor</span><span class="coord-value">${clock(state.cursor)}</span></div>
+      <div class="coord-box"><span class="coord-label">Watermark</span><span class="coord-value">${clock(state.watermark)}</span></div>
+      <div class="coord-box"><span class="coord-label">Knowledge time</span><span class="coord-value">${K}</span></div>
+      <div class="coord-box"><span class="coord-label">Window [10:00 – 11:00)</span>${badge ? `<span class="status-badge ${badge[1]}">${badge[0]}</span>` : '<span class="coord-value">—</span>'}</div>`;
+    const statusBadge = { active: '<span class="status-badge badge-open">Active</span>', corrected: '<span class="status-badge badge-revision">Corrected</span>', deleted: '<span class="status-badge badge-sealed">Deleted</span>' };
+    const storeRows = state.store.map(e => `<tr class="${e.status === 'deleted' ? 'row-retracted' : ''}"><td>${e.id}</td><td>${e.time}</td><td>${e.rev}</td><td>\`AAPL</td><td>${e.price.toFixed(2)}</td><td>${e.size}</td><td>${statusBadge[e.status]}</td></tr>`).join('')
+      || '<tr><td colspan="7" class="tt-empty">No events yet</td></tr>';
+    const view = state.view;
+    const viewRows = view.volume !== undefined
+      ? `<tr><td>10:00:00</td><td>\`AAPL</td><td>${ttFmt(view.volume)}</td><td>${ttFmt(view.turnover)}</td><td><strong class="tt-vwap">${ttFmt(view.value)}</strong></td></tr>`
+      : '<tr><td colspan="5" class="tt-empty">No rows</td></tr>';
+    const delta = state.delta.length ? state.delta.map(l => escapeHtml(l)).join('<br>') : '(nothing published yet)';
+    const now = tt.k ? TT.commits[tt.k - 1] : null;
 
     const query = `vwap at ${T} known_at ${K}`;
     let result;
@@ -431,13 +466,25 @@ correct trades 1 rev 1 {px: 105}`
     const script = TT.setup + '\n' + TT.commits.map(c => `clock ${c.known}\n${c.statement}`).join('\n')
       + `\n\nvwap\n${query}\n\n# Refused: the 10:00 window is sealed\nclock ${TT.rejected.known}\n${TT.rejected.statement}`;
 
-    root.innerHTML = `<header class="tt-head"><h2>Time travel</h2>
-      <p>tempr tracks two times: when a trade <em>happened</em> (event time, left to right) and when tempr <em>learned</em> about it (knowledge time, top to bottom).
-      Pick any point to ask <code>vwap at T known_at K</code>. Every answer here was computed by the tempr ${escapeHtml(window.TEMPR_VERSION || '')} CLI when this site was built.</p>
-      <div class="tt-presets">${TT_PRESETS.map(([name, k, t]) => `<button class="tt-preset${k === tt.k && t === tt.t ? ' selected' : ''}" data-k="${k}" data-t="${t}">${name}</button>`).join('')}</div></header>
-      <div class="tt-body"><div class="tt-log"><div class="tt-log-head"><span>Knowledge time ↓</span><span>live VWAP</span></div>${labels}</div>
+    root.innerHTML = `<header class="explorer-header"><div><h2>Time travel demonstration</h2>
+      <p class="subtitle">Step through commits to see corrections, late data and sealing, then ask what was known at any point.
+      Every value on this page was computed by the tempr ${escapeHtml(window.TEMPR_VERSION || '')} CLI when this site was built.</p></div></header>
+      <div class="commit-stepper">${stepper}</div>
+      <p class="tt-now">${now ? `<strong>@${tt.k}</strong> ${escapeHtml(now.caption)} <code>${escapeHtml(now.statement)}</code>` : 'Nothing has been committed yet. Pick a commit above.'}</p>
+      <div class="time-coordinates-bar">${coords}</div>
+      <div class="explorer-grid">
+        <div class="card explorer-panel"><div class="panel-header"><h3>Event version store (source: trades)</h3><span class="badge">${state.events} events · ${state.versions} versions</span></div>
+          <div class="table-container"><table class="data-table"><thead><tr><th>ID</th><th>Event time</th><th>Rev</th><th>Sym</th><th>Price</th><th>Size</th><th>Status</th></tr></thead><tbody>${storeRows}</tbody></table></div></div>
+        <div class="card explorer-panel"><div class="panel-header"><h3>Materialized view (view: vwap)</h3><span class="badge">${view.volume !== undefined ? '1 group' : '0 groups'}</span></div>
+          <div class="table-container"><table class="data-table"><thead><tr><th>Window</th><th>Sym</th><th>Volume</th><th>Turnover</th><th>VWAP</th></tr></thead><tbody>${viewRows}</tbody></table></div>
+          <div class="delta-box"><div class="delta-label">Published at this commit</div><code class="delta-code">${delta}</code></div></div>
+      </div>
+      <section class="card query-panel"><div class="panel-header"><h3>Bi-temporal query: <code>at T known_at K</code></h3></div>
+      <p class="tt-intro">Rows are knowledge time (what tempr had learned), columns are event time (when trades happened). Click any cell, or use the arrow keys.</p>
+      <div class="tt-presets">${TT_PRESETS.map(([name, k, t]) => `<button class="tt-preset${k === tt.k && t === tt.t ? ' selected' : ''}" data-k="${k}" data-t="${t}">${name}</button>`).join('')}</div>
+      <div class="tt-body"><div class="tt-log"><div class="tt-log-head"><span>Knowledge ↓</span><span>live VWAP</span></div>${labels}</div>
       <div class="tt-chart"></div></div>
-      <section class="tt-answer" aria-live="polite"><div class="tt-query"><code>${query}</code><button class="copy-btn" data-copy="${escapeHtml(query)}">Copy</button></div>${result}${reasons}</section>
+      <div class="tt-answer" aria-live="polite"><div class="tt-query"><code>${query}</code><button class="copy-btn" data-copy="${escapeHtml(query)}">Copy</button></div>${result}${reasons}</div></section>
       <details class="tt-script"><summary>Run it yourself</summary><p>Save as <code>timetravel.tr</code> and run <code>./bin/tempr timetravel.tr</code>. The last command fails with <code>${TT.rejected.error}</code>, as shown above.</p>
       <pre class="code-content"><code>${escapeHtml(script)}</code></pre><button class="copy-btn" data-copy="${escapeHtml(script)}">Copy script</button></details>`;
 
@@ -445,14 +492,14 @@ correct trades 1 rev 1 {px: 105}`
     W = Math.max(360, chart.clientWidth);
     chart.innerHTML = plotSvg();
 
-    const set = (k, t) => {
+    const set = (k, t, refocus) => {
       tt.k = Math.max(0, Math.min(TT.commits.length, k));
       tt.t = Math.max(0, Math.min(TT.eventTimes.length - 1, t));
       renderTimeTravel();
-      document.querySelector('.tt-plot').focus();
+      if (refocus) document.querySelector(refocus).focus({ preventScroll: true });
     };
     root.querySelectorAll('.tt-preset').forEach(b => b.addEventListener('click', () => set(Number(b.dataset.k), Number(b.dataset.t))));
-    root.querySelectorAll('button.tt-row').forEach(b => b.addEventListener('click', () => set(Number(b.dataset.row), tt.t)));
+    root.querySelectorAll('button.tt-row, button.step-card').forEach(b => b.addEventListener('click', () => set(Number(b.dataset.row), tt.t)));
     root.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', () => {
       navigator.clipboard.writeText(b.dataset.copy).then(() => showToast('Copied'));
     }));
@@ -462,13 +509,13 @@ correct trades 1 rev 1 {px: 105}`
       const px = e.clientX - box.left;
       const row = Math.floor((e.clientY - box.top - TOP) / RH);
       const col = TT.eventTimes.reduce((best, t, i) => (Math.abs(x(t) - px) < Math.abs(x(TT.eventTimes[best]) - px) ? i : best), 0);
-      set(row >= 0 && row <= TT.commits.length ? row : tt.k, col);
+      set(row >= 0 && row <= TT.commits.length ? row : tt.k, col, '.tt-plot');
     });
     plot.addEventListener('keydown', e => {
       const move = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
       if (!move) return;
       e.preventDefault();
-      set(tt.k + move[0], tt.t + move[1]);
+      set(tt.k + move[0], tt.t + move[1], '.tt-plot');
     });
   }
 

@@ -353,6 +353,248 @@ window.TEMPR_TIMETRAVEL = {
    "value": 202.0
   }
  },
+ "states": [
+  {
+   "cursor": "none",
+   "watermark": "none",
+   "window": null,
+   "events": 0,
+   "versions": 0,
+   "store": [],
+   "view": {
+    "empty": true
+   },
+   "delta": []
+  },
+  {
+   "cursor": "2026-09-28T10:00:00",
+   "watermark": "none",
+   "window": "open",
+   "events": 1,
+   "versions": 1,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 1,
+     "price": 200,
+     "size": 100,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 1,
+    "volume": 100,
+    "turnover": 20000.0,
+    "value": 200.0
+   },
+   "delta": [
+    "+ window=2026-09-28T10:00:00 sym=AAPL volume=100 turnover=20000 value=200"
+   ]
+  },
+  {
+   "cursor": "2026-09-28T10:00:20",
+   "watermark": "none",
+   "window": "open",
+   "events": 2,
+   "versions": 2,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 1,
+     "price": 200,
+     "size": 100,
+     "status": "active"
+    },
+    {
+     "id": 2,
+     "time": "10:00:20",
+     "rev": 1,
+     "price": 202,
+     "size": 100,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 2,
+    "volume": 200,
+    "turnover": 40200.0,
+    "value": 201.0
+   },
+   "delta": [
+    "~ window=2026-09-28T10:00:00 sym=AAPL volume=100 -> 200 turnover=20000 -> 40200 value=200 -> 201"
+   ]
+  },
+  {
+   "cursor": "2026-09-28T10:02:00",
+   "watermark": "none",
+   "window": "open",
+   "events": 3,
+   "versions": 3,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 1,
+     "price": 200,
+     "size": 100,
+     "status": "active"
+    },
+    {
+     "id": 2,
+     "time": "10:00:20",
+     "rev": 1,
+     "price": 202,
+     "size": 100,
+     "status": "active"
+    },
+    {
+     "id": 3,
+     "time": "10:00:10",
+     "rev": 1,
+     "price": 201,
+     "size": 200,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 3,
+    "volume": 400,
+    "turnover": 80400.0,
+    "value": 201.0
+   },
+   "delta": [
+    "~ window=2026-09-28T10:00:00 sym=AAPL volume=200 -> 400 turnover=40200 -> 80400 value=201"
+   ]
+  },
+  {
+   "cursor": "2026-09-28T10:05:00",
+   "watermark": "none",
+   "window": "open",
+   "events": 3,
+   "versions": 4,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 1,
+     "price": 200,
+     "size": 100,
+     "status": "active"
+    },
+    {
+     "id": 2,
+     "time": "10:00:20",
+     "rev": 2,
+     "price": 204,
+     "size": 100,
+     "status": "corrected"
+    },
+    {
+     "id": 3,
+     "time": "10:00:10",
+     "rev": 1,
+     "price": 201,
+     "size": 200,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 4,
+    "volume": 400,
+    "turnover": 80600.0,
+    "value": 201.5
+   },
+   "delta": [
+    "~ window=2026-09-28T10:00:00 sym=AAPL volume=400 turnover=80400 -> 80600 value=201 -> 201.5"
+   ]
+  },
+  {
+   "cursor": "2026-09-28T10:06:00",
+   "watermark": "none",
+   "window": "open",
+   "events": 3,
+   "versions": 5,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 2,
+     "price": 200,
+     "size": 100,
+     "status": "deleted"
+    },
+    {
+     "id": 2,
+     "time": "10:00:20",
+     "rev": 2,
+     "price": 204,
+     "size": 100,
+     "status": "corrected"
+    },
+    {
+     "id": 3,
+     "time": "10:00:10",
+     "rev": 1,
+     "price": 201,
+     "size": 200,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 5,
+    "volume": 300,
+    "turnover": 60600.0,
+    "value": 202.0
+   },
+   "delta": [
+    "~ window=2026-09-28T10:00:00 sym=AAPL volume=400 -> 300 turnover=80600 -> 60600 value=201.5 -> 202"
+   ]
+  },
+  {
+   "cursor": "2026-09-28T11:15:00",
+   "watermark": "2026-09-28T11:15:00",
+   "window": "sealed",
+   "events": 3,
+   "versions": 5,
+   "store": [
+    {
+     "id": 1,
+     "time": "10:00:00",
+     "rev": 2,
+     "price": 200,
+     "size": 100,
+     "status": "deleted"
+    },
+    {
+     "id": 2,
+     "time": "10:00:20",
+     "rev": 2,
+     "price": 204,
+     "size": 100,
+     "status": "corrected"
+    },
+    {
+     "id": 3,
+     "time": "10:00:10",
+     "rev": 1,
+     "price": 201,
+     "size": 200,
+     "status": "active"
+    }
+   ],
+   "view": {
+    "seq": 6,
+    "volume": 300,
+    "turnover": 60600.0,
+    "value": 202.0
+   },
+   "delta": [
+    "window 2026-09-28T10:00:00 sealed"
+   ]
+  }
+ ],
  "commits": [
   {
    "known": "10:00:00",
