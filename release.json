@@ -1,0 +1,14 @@
+{
+  "version": "0.1.0",
+  "status": "release",
+  "binary_downloads_available": true,
+  "packages": [
+    {
+      "platform": "macOS ARM64 (Apple Silicon)",
+      "file": "tempr-0.1.0-macos-arm64.tar.gz",
+      "path": "downloads/tempr-0.1.0-macos-arm64.tar.gz",
+      "size": 292604,
+      "sha256": "b78fd2488079b8ac47e28fe94b99612931b5aa32dcc5d803249129e13e15445d"
+    }
+  ]
+}

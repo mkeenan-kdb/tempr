@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tempr — Temporal Incremental Analytics Engine</title>
+  <meta name="description" content="Official documentation and interactive guides for tempr: an embedded, zero-dependency temporal incremental computation engine in C11.">
+  
+  <!-- Offline reference: use platform fonts. -->
+  <!-- Styles -->
+  <link rel="stylesheet" href="vendor/katex.min.css">
+  <link rel="stylesheet" href="index.css">
+  <link rel="stylesheet" href="reference.css">
+</head>
+<body>
+  <a class="skip-link" href="#docArticle">Skip to content</a>
+  <!-- Top Navigation Header -->
+  <header class="top-nav" id="topNav">
+    <div class="nav-left">
+      <button class="mobile-toggle" id="mobileMenuBtn" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <a href="#doc/00-introduction" class="brand-logo" id="brandLogo">
+        <div class="logo-mark">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+            <path d="M6 8 L16 4 L26 8 L26 24 L16 28 L6 24 Z" stroke="url(#logo-grad)" stroke-width="2.5" stroke-linejoin="round"/>
+            <path d="M16 4 L16 28" stroke="url(#logo-grad)" stroke-width="1.8" stroke-dasharray="2 3"/>
+            <circle cx="16" cy="16" r="4.5" fill="url(#logo-grad)"/>
+            <defs>
+              <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8"/>
+                <stop offset="50%" stop-color="#818cf8"/>
+                <stop offset="100%" stop-color="#34d399"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="brand-text">tempr</span>
+        <span class="version-tag">v0.1.0</span>
+      </a>
+    </div>
+
+    <!-- Center Navigation Tabs -->
+    <nav class="nav-tabs" aria-label="Primary site navigation">
+      <button class="nav-tab active" id="tabDocs" data-view="docs">
+        Docs
+      </button>
+      <button class="nav-tab" id="tabExplorer" data-view="explorer">
+        Interactive Demo
+      </button>
+      <a class="nav-tab" href="#doc/08-benchmarks">Benchmarks</a>
+      <a class="nav-tab" href="#doc/first-system">Get started →</a>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="nav-right">
+      <button class="search-trigger" id="searchBtn" aria-label="Search documentation">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <span class="search-hint">Search docs...</span>
+        <kbd class="search-kbd">⌘K</kbd>
+      </button>
+
+      <button class="theme-btn" id="themeBtn" aria-label="Toggle theme">
+        <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+
+      <a href="#doc/api-engine" class="header-api-link">tempr.h ↗</a>
+    </div>
+  </header>
+
+  <!-- View 1: Documentation View -->
+  <div class="view-container active" id="viewDocs">
+    <!-- Left Navigation Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">PUBLIC REFERENCE</span>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav">
+        <!-- Injected via app.js -->
+      </nav>
+      <div class="sidebar-footer">
+        <div class="engine-badge">
+          <div class="status-indicator"></div>
+          <span>Release 0.1.0 · C11 API</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-main" id="contentMain">
+      <div class="content-wrapper">
+        <div class="doc-header" id="docHeader">
+          <div class="breadcrumb" id="breadcrumb"></div>
+        </div>
+        <article class="markdown-body" id="docArticle" tabindex="-1">
+          <!-- Rendered markdown content -->
+        </article>
+        
+        <!-- Bottom Pagination -->
+        <nav class="doc-pagination" id="docPagination">
+          <a href="#" class="page-link prev" id="pagePrev">
+            <span class="page-dir">← Previous</span>
+            <span class="page-title" id="pagePrevTitle"></span>
+          </a>
+          <a href="#" class="page-link next" id="pageNext">
+            <span class="page-dir">Next →</span>
+            <span class="page-title" id="pageNextTitle"></span>
+          </a>
+        </nav>
+      </div>
+    </main>
+
+    <!-- Right Sidebar: On This Page Table of Contents -->
+    <aside class="toc-sidebar" id="tocSidebar">
+      <div class="toc-title">On this page</div>
+      <nav class="toc-nav" id="tocNav">
+        <!-- Headings auto-extracted -->
+      </nav>
+      <div class="toc-quicklinks">
+        <div class="toc-title">Quick Actions</div>
+        <button class="quicklink-btn" id="tocLaunchPlayground">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          DSL sample outputs
+        </button>
+        <button class="quicklink-btn" id="tocLaunchExplorer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Time travel demo
+        </button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- View 2: Interactive Time-Travel Explorer -->
+  <div class="view-container" id="viewExplorer">
+    <div class="explorer-wrapper">
+      <div class="explorer-header">
+        <div>
+          <h2>Time travel demonstration</h2>
+          <p class="subtitle">Step through recorded VWAP states to explore corrections and historical queries. This demonstration does not run the native engine.</p>
+        </div>
+        <div class="explorer-controls">
+          <button class="btn btn-secondary" id="btnResetExplorer">Reset to Start</button>
+        </div>
+      </div>
+
+      <!-- Commit Step Timeline -->
+      <div class="commit-stepper">
+        <div class="step-card" data-step="0">
+          <div class="step-num">C0</div>
+          <div class="step-info">
+            <div class="step-title">Initial State</div>
+            <div class="step-meta">09:00:00 • Ready</div>
+          </div>
+        </div>
+        <div class="step-card active" data-step="1">
+          <div class="step-num">C1</div>
+          <div class="step-info">
+            <div class="step-title">Insert Trade #1</div>
+            <div class="step-meta">10:00:00.100 • AAPL 100 @ 200</div>
+          </div>
+        </div>
+        <div class="step-card" data-step="2">
+          <div class="step-num">C2</div>
+          <div class="step-info">
+            <div class="step-title">Insert Trade #2</div>
+            <div class="step-meta">10:00:01.100 • AAPL 100 @ 202</div>
+          </div>
+        </div>
+        <div class="step-card" data-step="3">
+          <div class="step-num">C3</div>
+          <div class="step-info">
+            <div class="step-title">Correct Trade #2</div>
+            <div class="step-meta">10:05:00 • Rev 1 → Price 204</div>
+          </div>
+        </div>
+        <div class="step-card" data-step="4">
+          <div class="step-num">C4</div>
+          <div class="step-info">
+            <div class="step-title">Delete Trade #1</div>
+            <div class="step-meta">10:06:00 • Retract Trade #1</div>
+          </div>
+        </div>
+        <div class="step-card" data-step="5">
+          <div class="step-num">C5</div>
+          <div class="step-info">
+            <div class="step-title">Advance Watermark</div>
+            <div class="step-meta">11:10:00 • Seal Window</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Time Coordinates Display -->
+      <div class="time-coordinates-bar">
+        <div class="coord-box">
+          <span class="coord-label">Evaluation Cursor</span>
+          <span class="coord-value" id="valCursor">10:00:00.100</span>
+        </div>
+        <div class="coord-box">
+          <span class="coord-label">Watermark</span>
+          <span class="coord-value" id="valWatermark">09:00:00</span>
+        </div>
+        <div class="coord-box">
+          <span class="coord-label">Knowledge Time</span>
+          <span class="coord-value" id="valKnowledge">10:00:00.100</span>
+        </div>
+        <div class="coord-box">
+          <span class="coord-label">Window [10:00 - 11:00)</span>
+          <span class="status-badge badge-open" id="badgeWindowState">OPEN</span>
+        </div>
+      </div>
+
+      <!-- Visual State Dashboard -->
+      <div class="explorer-grid">
+        <!-- Panel 1: Live Trades Version Store -->
+        <div class="card explorer-panel">
+          <div class="panel-header">
+            <h3>Event Version Store (Source: trades)</h3>
+            <span class="badge" id="tagEventCount">1 event</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="tableTrades">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Event Time</th>
+                  <th>Rev</th>
+                  <th>Sym</th>
+                  <th>Price</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Injected via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Panel 2: Materialized VWAP View State -->
+        <div class="card explorer-panel">
+          <div class="panel-header">
+            <h3>Materialized View State (view: vwap)</h3>
+            <span class="badge" id="tagViewCount">1 group</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="tableVwap">
+              <thead>
+                <tr>
+                  <th>Window</th>
+                  <th>Sym</th>
+                  <th>Volume</th>
+                  <th>Turnover</th>
+                  <th>VWAP (Value)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Injected via app.js -->
+              </tbody>
+            </table>
+          </div>
+          <div class="delta-box" id="deltaBox">
+            <div class="delta-label">Epoch Publication Delta:</div>
+            <code class="delta-code" id="deltaCode">+ window=10:00:00 sym=AAPL volume=100 turnover=20000 value=200</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: Interactive Time-Travel Query Box -->
+      <div class="card query-panel">
+        <div class="panel-header">
+          <h3>Bi-Temporal Historical Query Simulator (at T known_at K)</h3>
+        </div>
+        <div class="query-builder">
+          <div class="query-inputs">
+            <div class="input-group">
+              <label for="queryAtTime">Query Event Time (at T)</label>
+              <select id="queryAtTime" class="select-field">
+                <option value="10:00:00">10:00:00 (Trade 1)</option>
+                <option value="10:00:01" selected>10:00:01 (Trades 1 & 2)</option>
+                <option value="10:00:00.500">10:00:00.500 (Prefix Trade 1 only)</option>
+                <option value="11:30:00">11:30:00 (Future window)</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="queryKnownAt">Knowledge Snapshot (known_at K)</label>
+              <select id="queryKnownAt" class="select-field">
+                <option value="10:01:00">10:01:00 (After Commit 2: original trades)</option>
+                <option value="10:05:30" selected>10:05:30 (After Commit 3: price corrected to 204)</option>
+                <option value="10:06:00">10:06:00 (After Commit 4: trade 1 retracted)</option>
+                <option value="latest">Latest Accepted Reconstruction (Commit 4)</option>
+                <option value="09:00:00">09:00:00 (Before any commit)</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btnRunTimeTravel">Execute Query</button>
+          </div>
+          <div class="query-result-box" id="queryResultBox">
+            <div class="result-header">
+              <span class="result-title">Query Result:</span>
+              <span class="result-status status-ok" id="queryStatus">OK (Commit @3)</span>
+            </div>
+            <div class="result-display" id="queryResultContent">
+              <!-- Result table or error -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View 3: Interactive Web Playground -->
+  <div class="view-container" id="viewPlayground">
+    <div class="playground-wrapper">
+      <div class="playground-header">
+        <div>
+          <h2>DSL sample outputs</h2>
+          <p class="subtitle">Illustrative, precomputed output for the bundled samples. Run the native CLI to execute scripts; edits here are not evaluated by tempr.</p>
+        </div>
+        <div class="playground-actions">
+          <select id="sampleSelect" class="select-field">
+            <option value="worked_example">Sample: §11 Worked Example (VWAP)</option>
+            <option value="tca">Recipe: Multi-Stage TCA & Slippage</option>
+            <option value="imbalance">Recipe: Order Flow Imbalance (View Zip)</option>
+            <option value="variance">Recipe: Real-Time Price Variance</option>
+            <option value="microprice">Recipe: Top-of-Book Micro-Price</option>
+            <option value="diamond">Sample: Diamond View Arithmetic (B=2A, C=A+B)</option>
+            <option value="filtering">Sample: Symbol Filtering & Maybe Nulls</option>
+            <option value="sealing">Sample: Window Sealing & Rejections</option>
+          </select>
+
+          <button class="btn btn-primary" id="btnRunPlayground">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Show sample output
+          </button>
+          <button class="btn btn-secondary" id="btnClearPlayground">Clear</button>
+        </div>
+      </div>
+
+      <div class="playground-workspace">
+        <div class="editor-pane">
+          <div class="pane-header">
+            <span>Editor (tempr DSL)</span>
+            <span class="editor-hint">Press ⌘+Enter to Run</span>
+          </div>
+          <textarea id="playgroundCode" class="code-editor" spellcheck="false" placeholder="Enter tempr statements here..."></textarea>
+        </div>
+
+        <div class="terminal-pane">
+          <div class="pane-header">
+            <span>Terminal Output</span>
+            <button class="copy-output-btn" id="btnClearOutput">Clear</button>
+          </div>
+          <pre class="terminal-output" id="playgroundOutput"><span class="term-comment"># Select a bundled sample to see its recorded output. This is not a runtime.</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Modal -->
+  <div class="modal-overlay" id="searchModal" aria-hidden="true">
+    <div class="search-modal">
+      <div class="search-input-wrapper">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="modalSearchInput" placeholder="Search documentation, API, concepts..." autocomplete="off">
+        <kbd class="esc-kbd">ESC</kbd>
+      </div>
+      <div class="search-results" id="searchResults">
+        <!-- Results injected via app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="vendor/katex.min.js"></script>
+  <script src="docs-data.js?v=3"></script>
+  <script src="app.js?v=3"></script>
+</body>
+</html>
