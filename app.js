@@ -8,7 +8,6 @@
   // --- State ---
   let currentDocId = '00-introduction';
   let searchIndex = [];
-  let currentExplorerStep = 1;
 
   // --- Document Category Mapping ---
   const CATEGORIES = window.TEMPR_CATEGORIES || [];
@@ -306,117 +305,194 @@ advance trades watermark 11:10:00
 correct trades 1 rev 1 {px: 105}`
   };
 
-  // --- Step-by-Step Data Model for Explorer ---
-  const EXPLORER_STEPS = {
-    0: {
-      title: "Initial State (Pre-ingestion)",
-      cursor: "09:00:00",
-      watermark: "09:00:00",
-      knowledge: "09:00:00",
-      windowState: "OPEN",
-      windowBadgeClass: "badge-open",
-      eventCount: "0 events",
-      viewCount: "0 groups",
-      trades: [],
-      vwapRows: [],
-      delta: "(No epoch published)",
-      commitSeq: 0
-    },
-    1: {
-      title: "Commit 1: Insert Trade #1",
-      cursor: "10:00:00.100",
-      watermark: "09:00:00",
-      knowledge: "10:00:00.100",
-      windowState: "OPEN",
-      windowBadgeClass: "badge-open",
-      eventCount: "1 event",
-      viewCount: "1 group",
-      trades: [
-        { id: 1, time: "10:00:00", rev: 1, sym: "AAPL", price: 200, size: 100, status: "Active" }
-      ],
-      vwapRows: [
-        { window: "10:00:00", sym: "AAPL", volume: 100, turnover: 20000, value: 200 }
-      ],
-      delta: "+ window=10:00:00 sym=AAPL volume=100 turnover=20000 value=200",
-      commitSeq: 1
-    },
-    2: {
-      title: "Commit 2: Insert Trade #2",
-      cursor: "10:00:01.100",
-      watermark: "09:00:00",
-      knowledge: "10:00:01.100",
-      windowState: "OPEN",
-      windowBadgeClass: "badge-open",
-      eventCount: "2 events",
-      viewCount: "1 group",
-      trades: [
-        { id: 1, time: "10:00:00", rev: 1, sym: "AAPL", price: 200, size: 100, status: "Active" },
-        { id: 2, time: "10:00:01", rev: 1, sym: "AAPL", price: 202, size: 100, status: "Active" }
-      ],
-      vwapRows: [
-        { window: "10:00:00", sym: "AAPL", volume: 200, turnover: 40200, value: 201 }
-      ],
-      delta: "~ window=10:00:00 sym=AAPL volume=100 -> 200 turnover=20000 -> 40200 value=200 -> 201",
-      commitSeq: 2
-    },
-    3: {
-      title: "Commit 3: Correct Trade #2 (202 -> 204)",
-      cursor: "10:05:00",
-      watermark: "09:00:00",
-      knowledge: "10:05:00",
-      windowState: "OPEN",
-      windowBadgeClass: "badge-open",
-      eventCount: "2 events (1 corrected)",
-      viewCount: "1 group",
-      trades: [
-        { id: 1, time: "10:00:00", rev: 1, sym: "AAPL", price: 200, size: 100, status: "Active" },
-        { id: 2, time: "10:00:01", rev: 2, sym: "AAPL", price: 204, size: 100, status: "Amended" }
-      ],
-      vwapRows: [
-        { window: "10:00:00", sym: "AAPL", volume: 200, turnover: 40400, value: 202 }
-      ],
-      delta: "~ window=10:00:00 sym=AAPL volume=200 turnover=40200 -> 40400 value=201 -> 202",
-      commitSeq: 3
-    },
-    4: {
-      title: "Commit 4: Delete Trade #1 (Retraction)",
-      cursor: "10:06:00",
-      watermark: "09:00:00",
-      knowledge: "10:06:00",
-      windowState: "OPEN",
-      windowBadgeClass: "badge-open",
-      eventCount: "1 live event (1 retracted)",
-      viewCount: "1 group",
-      trades: [
-        { id: 1, time: "10:00:00", rev: 2, sym: "AAPL", price: 200, size: 100, status: "Deleted", retracted: true },
-        { id: 2, time: "10:00:01", rev: 2, sym: "AAPL", price: 204, size: 100, status: "Amended" }
-      ],
-      vwapRows: [
-        { window: "10:00:00", sym: "AAPL", volume: 100, turnover: 20400, value: 204 }
-      ],
-      delta: "~ window=10:00:00 sym=AAPL volume=200 -> 100 turnover=40400 -> 20400 value=202 -> 204",
-      commitSeq: 4
-    },
-    5: {
-      title: "Commit 5: Advance Watermark (Window Sealed)",
-      cursor: "11:10:00",
-      watermark: "11:10:00",
-      knowledge: "11:10:00",
-      windowState: "SEALED",
-      windowBadgeClass: "badge-sealed",
-      eventCount: "1 live event (immutable)",
-      viewCount: "1 group (sealed)",
-      trades: [
-        { id: 1, time: "10:00:00", rev: 2, sym: "AAPL", price: 200, size: 100, status: "Deleted", retracted: true },
-        { id: 2, time: "10:00:01", rev: 2, sym: "AAPL", price: 204, size: 100, status: "Amended (Sealed)" }
-      ],
-      vwapRows: [
-        { window: "10:00:00", sym: "AAPL", volume: 100, turnover: 20400, value: 204 }
-      ],
-      delta: "window 2026-09-27T10:00:00 sealed",
-      commitSeq: 5
+  // --- Time travel ---
+  // Answers come from scripts/gen_timetravel.py, which runs the real CLI. The version
+  // bars are drawn from the scenario ops; the generator asserts they match the engine.
+  const TT = window.TEMPR_TIMETRAVEL;
+  const tt = { k: TT ? TT.commits.length : 0, t: TT ? TT.eventTimes.length - 1 : 0 };
+  const TT_PRESETS = [
+    ['Latest answer', 6, 2], ['Before the late trade', 2, 2], ['Late trade, first seen', 3, 1],
+    ['Before the correction', 3, 2], ['Refusing to guess', 1, 2],
+  ];
+
+  function ttVersions() {
+    const out = [];
+    const live = {};
+    TT.commits.forEach((c, i) => {
+      const k = i + 1;
+      const op = c.op;
+      if (!op) return;
+      if (op[0] === 'new') {
+        live[op[1]] = { id: op[1], time: op[2], price: op[3], size: op[4], from: k, to: null };
+        out.push(live[op[1]]);
+        return;
+      }
+      const prev = live[op[1]];
+      prev.to = k;
+      prev.end = op[0];
+      if (op[0] === 'correct') {
+        live[op[1]] = { ...prev, price: op[2], from: k, to: null, end: null };
+        out.push(live[op[1]]);
+      } else {
+        delete live[op[1]];
+      }
+    });
+    return out;
+  }
+
+  const ttKnown = k => (k === 0 ? TT.before : TT.commits[k - 1].known);
+  const ttLive = (v, k) => v.from <= k && (v.to === null || v.to > k);
+  const ttFmt = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+  function ttReasons(versions, k, T) {
+    const ids = [...new Set(versions.map(v => v.id))];
+    return ids.map(id => {
+      const vs = versions.filter(v => v.id === id);
+      const known = vs.find(v => ttLive(v, k));
+      const first = vs[0];
+      const last = vs[vs.length - 1];
+      if (first.from > k) return ['out', `#${id} happened at ${first.time}, but tempr only learned of it at ${ttKnown(first.from)}.`];
+      if (!known) return ['out', `#${id} was busted (deleted) at ${ttKnown(last.to)}.`];
+      if (known.time > T) return ['out', `#${id} happened at ${known.time}, after the event time you asked about.`];
+      let note = '';
+      const next = vs.find(v => v.from > k);
+      if (next) note = ` Corrected to ${next.price} at ${ttKnown(next.from)}, after this snapshot.`;
+      else if (known.from > first.from) note = ` Corrected from ${first.price} at ${ttKnown(known.from)}.`;
+      if (last.end === 'delete' && last.to > k) note += ` Busted later, at ${ttKnown(last.to)}.`;
+      return ['in', `#${id}: ${known.size} @ ${known.price}.${note}`];
+    });
+  }
+
+  function renderTimeTravel() {
+    const root = document.getElementById('timeTravel');
+    if (!TT || !root) return;
+    const versions = ttVersions();
+    const T = TT.eventTimes[tt.t];
+    const K = ttKnown(tt.k);
+    const answer = TT.grid[`${tt.k}|${T}`];
+    const lastT = TT.eventTimes[TT.eventTimes.length - 1];
+    const rows = TT.commits.length + 2; // before-anything row, commits, refused commit
+
+    // Plot geometry: event time left to right, knowledge time top to bottom. The SVG is
+    // drawn at the column's pixel width so its rows line up with the commit log's rows.
+    const RH = 48, TOP = 30, X0 = 44, SPAN = 30;
+    const secs = t => Number(t.slice(3, 5)) * 60 + Number(t.slice(6, 8));
+    let W = 560;
+    const x = t => X0 + (secs(t) / SPAN) * (W - X0 - 130);
+    const y = r => TOP + r * RH;
+    const plotSvg = () => {
+    let svg = `<svg class="tt-plot" width="${W}" height="${y(rows)}" viewBox="0 0 ${W} ${y(rows)}" role="img" tabindex="0"
+      aria-label="Trade versions by event time and knowledge time. Use arrow keys to move the query point.">
+      <text class="tt-axis" x="${W - 12}" y="18" text-anchor="end">EVENT TIME →</text>`;
+    for (let r = 0; r < rows; r++) {
+      const cls = r === tt.k ? 'tt-band selected' : r === rows - 1 ? 'tt-band refused' : 'tt-band';
+      svg += `<rect class="${cls}" x="0" y="${y(r)}" width="${W}" height="${RH}" data-row="${r}"/>`;
     }
-  };
+    svg += `<rect class="tt-ask" x="0" y="${y(tt.k)}" width="${x(T) + 14}" height="${RH}"/>`;
+    TT.eventTimes.forEach((t, i) => {
+      svg += `<line class="tt-grid${i === tt.t ? ' selected' : ''}" x1="${x(t)}" x2="${x(t)}" y1="${TOP - 6}" y2="${y(rows)}"/>`;
+      svg += `<text class="tt-axis${i === tt.t ? ' selected' : ''}" x="${x(t)}" y="16" text-anchor="middle">${t}</text>`;
+    });
+    for (const v of versions) {
+      const state = answer.error ? 'out' : ttLive(v, tt.k) ? (v.time <= T ? 'in' : 'after') : 'out';
+      const bottom = v.to === null ? y(rows) : y(v.to);
+      svg += `<rect class="tt-v ${state}" x="${x(v.time) - 5}" y="${y(v.from) + 8}" width="10" height="${bottom - y(v.from) - 16}" rx="4"><title>#${v.id} ${v.size} @ ${v.price}, known ${ttKnown(v.from)}${v.to ? ' until ' + ttKnown(v.to) : ''}</title></rect>`;
+      svg += `<text class="tt-vlabel ${state}" x="${x(v.time) + 12}" y="${y(v.from) + RH / 2 + 4}">#${v.id} ${W < 520 ? v.price : v.size + '@' + v.price}</text>`;
+      if (v.end === 'delete') svg += `<text class="tt-vlabel out" x="${x(v.time)}" y="${y(v.to) + RH / 2 + 4}" text-anchor="middle">✕</text>`;
+    }
+    return svg + '</svg>';
+    };
+
+    const labels = [{ known: TT.before, caption: 'Nothing committed yet' }, ...TT.commits].map((c, r) => {
+      const live = TT.grid[`${r}|${lastT}`];
+      const value = live && live.value !== undefined ? ttFmt(live.value) : '—';
+      return `<button class="tt-row${r === tt.k ? ' selected' : ''}" data-row="${r}" title="${escapeHtml(c.statement || '')}">
+        <span class="tt-seq">${r ? '@' + r : ''}</span><span class="tt-known">${c.known}</span>
+        <span class="tt-caption">${escapeHtml(c.caption)}</span><span class="tt-live">${value}</span></button>`;
+    }).join('') + `<div class="tt-row refused" title="${escapeHtml(TT.rejected.statement)}"><span class="tt-seq">✕</span>
+      <span class="tt-known">${TT.rejected.known}</span><span class="tt-caption">${escapeHtml(TT.rejected.caption)}: <code>${TT.rejected.error}</code></span><span class="tt-live"></span></div>`;
+
+    const query = `vwap at ${T} known_at ${K}`;
+    let result;
+    if (answer.error) {
+      const why = tt.k === 0
+        ? `Nothing had been committed by ${K}, so there is no event time to answer about.`
+        : `At ${K} tempr had only processed event time up to ${K}: this stream's cursor follows knowledge time. It refuses to answer about ${T} rather than guess.`;
+      result = `<div class="tt-error"><code>${answer.error}</code> ${escapeHtml(answer.message)}</div><p class="tt-why">${why}</p>`;
+    } else if (answer.empty) {
+      result = `<div class="tt-stats"><div><strong>0 rows</strong><span>answered from commit @${answer.seq}</span></div></div>`;
+    } else {
+      result = `<div class="tt-stats"><div><strong title="${answer.value}">${ttFmt(answer.value)}</strong><span>VWAP</span></div>
+        <div><strong>${ttFmt(answer.volume)}</strong><span>volume</span></div><div><strong>${ttFmt(answer.turnover)}</strong><span>turnover</span></div>
+        <div><strong>@${answer.seq}</strong><span>commit used</span></div></div>`;
+    }
+    const reasons = answer.error ? '' : '<ul class="tt-reasons">' + ttReasons(versions, tt.k, T)
+      .map(([cls, text]) => `<li class="${cls}">${escapeHtml(text)}</li>`).join('') + '</ul>';
+    const script = TT.setup + '\n' + TT.commits.map(c => `clock ${c.known}\n${c.statement}`).join('\n')
+      + `\n\nvwap\n${query}\n\n# Refused: the 10:00 window is sealed\nclock ${TT.rejected.known}\n${TT.rejected.statement}`;
+
+    root.innerHTML = `<header class="tt-head"><h2>Time travel</h2>
+      <p>tempr tracks two times: when a trade <em>happened</em> (event time, left to right) and when tempr <em>learned</em> about it (knowledge time, top to bottom).
+      Pick any point to ask <code>vwap at T known_at K</code>. Every answer here was computed by the tempr ${escapeHtml(window.TEMPR_VERSION || '')} CLI when this site was built.</p>
+      <div class="tt-presets">${TT_PRESETS.map(([name, k, t]) => `<button class="tt-preset${k === tt.k && t === tt.t ? ' selected' : ''}" data-k="${k}" data-t="${t}">${name}</button>`).join('')}</div></header>
+      <div class="tt-body"><div class="tt-log"><div class="tt-log-head"><span>Knowledge time ↓</span><span>live VWAP</span></div>${labels}</div>
+      <div class="tt-chart"></div></div>
+      <section class="tt-answer" aria-live="polite"><div class="tt-query"><code>${query}</code><button class="copy-btn" data-copy="${escapeHtml(query)}">Copy</button></div>${result}${reasons}</section>
+      <details class="tt-script"><summary>Run it yourself</summary><p>Save as <code>timetravel.tr</code> and run <code>./bin/tempr timetravel.tr</code>. The last command fails with <code>${TT.rejected.error}</code>, as shown above.</p>
+      <pre class="code-content"><code>${escapeHtml(script)}</code></pre><button class="copy-btn" data-copy="${escapeHtml(script)}">Copy script</button></details>`;
+
+    const chart = root.querySelector('.tt-chart');
+    W = Math.max(360, chart.clientWidth);
+    chart.innerHTML = plotSvg();
+
+    const set = (k, t) => {
+      tt.k = Math.max(0, Math.min(TT.commits.length, k));
+      tt.t = Math.max(0, Math.min(TT.eventTimes.length - 1, t));
+      renderTimeTravel();
+      document.querySelector('.tt-plot').focus();
+    };
+    root.querySelectorAll('.tt-preset').forEach(b => b.addEventListener('click', () => set(Number(b.dataset.k), Number(b.dataset.t))));
+    root.querySelectorAll('button.tt-row').forEach(b => b.addEventListener('click', () => set(Number(b.dataset.row), tt.t)));
+    root.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', () => {
+      navigator.clipboard.writeText(b.dataset.copy).then(() => showToast('Copied'));
+    }));
+    const plot = root.querySelector('.tt-plot');
+    plot.addEventListener('click', e => {
+      const box = plot.getBoundingClientRect();
+      const px = e.clientX - box.left;
+      const row = Math.floor((e.clientY - box.top - TOP) / RH);
+      const col = TT.eventTimes.reduce((best, t, i) => (Math.abs(x(t) - px) < Math.abs(x(TT.eventTimes[best]) - px) ? i : best), 0);
+      set(row >= 0 && row <= TT.commits.length ? row : tt.k, col);
+    });
+    plot.addEventListener('keydown', e => {
+      const move = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
+      if (!move) return;
+      e.preventDefault();
+      set(tt.k + move[0], tt.t + move[1]);
+    });
+  }
+
+  // --- Benchmark bar charts: ```chart blocks hold the numbers, the page tables hold the detail ---
+  // spec: {title, better: 'lower'|'higher', highlight, bars: [[label, value, displayText]], note}
+  function renderBarChart(spec) {
+    const max = Math.max(...spec.bars.map(b => b[1]));
+    const base = spec.bars.find(b => b[0] === spec.highlight);
+    const rows = spec.bars.map(([label, value, text]) => {
+      let ratio = '';
+      if (base && label !== spec.highlight) {
+        const r = spec.better === 'lower' ? value / base[1] : base[1] / value;
+        const n = r >= 1 ? r : 1 / r;
+        if (n >= 1.05) ratio = `${n < 10 ? n.toFixed(1) : Math.round(n)}× ${r >= 1 ? 'slower' : 'faster'}`;
+      }
+      const hl = label === spec.highlight ? ' hl' : '';
+      return `<div class="bar-row${hl}" title="${escapeHtml(`${label}: ${text}${ratio ? ' (' + ratio + ' than ' + spec.highlight + ')' : ''}`)}">
+        <span class="bar-label">${escapeHtml(label)}</span>
+        <span class="bar-track"><span class="bar" style="width:${(100 * value / max).toFixed(2)}%"></span></span>
+        <span class="bar-value">${escapeHtml(text)}${ratio ? `<small>${ratio}</small>` : ''}</span></div>`;
+    }).join('');
+    return `<figure class="bars"><figcaption><strong>${escapeHtml(spec.title)}</strong><span>${spec.better} is better</span></figcaption>${rows}`
+      + (spec.note ? `<p class="bar-note">${inlineFormat(spec.note)}</p>` : '') + '</figure>\n';
+  }
 
   // --- Math Formatting Engine ---
   function renderMath(expr, displayMode) {
@@ -535,7 +611,7 @@ correct trades 1 rev 1 {px: 105}`
         const rawCode = cleanedLines.join('\n');
         const highlighted = syntaxHighlight(rawCode, codeLang);
         const langLabel = codeLang || 'text';
-        const blockHtml = `<div class="code-block-wrapper">
+        const blockHtml = codeLang === 'chart' ? renderBarChart(JSON.parse(rawCode)) : `<div class="code-block-wrapper">
           <div class="code-header">
             <span>${escapeHtml(langLabel.toUpperCase())}</span>
             <button class="copy-btn" data-code="${escapeHtml(rawCode)}">Copy</button>
@@ -910,7 +986,7 @@ correct trades 1 rev 1 {px: 105}`
 
   // --- Copy Code Blocks ---
   function attachCopyButtons() {
-    document.querySelectorAll('.copy-btn').forEach(btn => {
+    document.querySelectorAll('#docArticle .copy-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const code = btn.getAttribute('data-code');
         navigator.clipboard.writeText(code).then(() => {
@@ -978,147 +1054,10 @@ correct trades 1 rev 1 {px: 105}`
     } else if (viewName === 'explorer') {
       document.getElementById('viewExplorer').classList.add('active');
       document.getElementById('tabExplorer').classList.add('active');
-      updateExplorerStep(currentExplorerStep);
+      renderTimeTravel();
     } else if (viewName === 'playground') {
       document.getElementById('viewPlayground').classList.add('active');
       loadPlaygroundSample('worked_example');
-    }
-  }
-
-  // --- Time-Travel Explorer Logic ---
-  function updateExplorerStep(step) {
-    currentExplorerStep = step;
-    const data = EXPLORER_STEPS[step];
-    if (!data) return;
-
-    // Update stepper cards active class
-    document.querySelectorAll('.step-card').forEach(card => {
-      card.classList.toggle('active', parseInt(card.dataset.step) === step);
-    });
-
-    // Update Coordinates
-    document.getElementById('valCursor').textContent = data.cursor;
-    document.getElementById('valWatermark').textContent = data.watermark;
-    document.getElementById('valKnowledge').textContent = data.knowledge;
-    
-    const badgeWindow = document.getElementById('badgeWindowState');
-    badgeWindow.textContent = data.windowState;
-    badgeWindow.className = `status-badge ${data.windowBadgeClass}`;
-
-    // Update Event Table
-    document.getElementById('tagEventCount').textContent = data.eventCount;
-    const tbodyTrades = document.querySelector('#tableTrades tbody');
-    tbodyTrades.innerHTML = '';
-    if (data.trades.length === 0) {
-      tbodyTrades.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No events committed yet</td></tr>`;
-    } else {
-      data.trades.forEach(t => {
-        const tr = document.createElement('tr');
-        if (t.retracted) tr.className = 'row-retracted';
-        tr.innerHTML = `
-          <td><strong>${t.id}</strong></td>
-          <td>${t.time}</td>
-          <td>${t.rev}</td>
-          <td><span style="color: var(--accent-emerald); font-weight: 600;">\`${t.sym}</span></td>
-          <td>${t.price.toFixed(2)}</td>
-          <td>${t.size}</td>
-          <td><span class="status-badge ${t.retracted ? 'badge-sealed' : 'badge-open'}">${t.status}</span></td>
-        `;
-        tbodyTrades.appendChild(tr);
-      });
-    }
-
-    // Update VWAP Materialization Table
-    document.getElementById('tagViewCount').textContent = data.viewCount;
-    const tbodyVwap = document.querySelector('#tableVwap tbody');
-    tbodyVwap.innerHTML = '';
-    if (data.vwapRows.length === 0) {
-      tbodyVwap.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">(Empty view)</td></tr>`;
-    } else {
-      data.vwapRows.forEach(v => {
-        const tr = document.createElement('tr');
-        tr.className = 'row-active';
-        tr.innerHTML = `
-          <td>${v.window}</td>
-          <td><span style="color: var(--accent-emerald); font-weight: 600;">\`${v.sym}</span></td>
-          <td>${v.volume}</td>
-          <td>${v.turnover.toLocaleString()}</td>
-          <td><strong style="color: var(--accent-cyan);">${v.value.toFixed(2)}</strong></td>
-        `;
-        tbodyVwap.appendChild(tr);
-      });
-    }
-
-    // Update Delta Box
-    document.getElementById('deltaCode').textContent = data.delta;
-  }
-
-  function runTimeTravelQuery() {
-    const atTime = document.getElementById('queryAtTime').value;
-    const knownAt = document.getElementById('queryKnownAt').value;
-    const statusEl = document.getElementById('queryStatus');
-    const contentEl = document.getElementById('queryResultContent');
-
-    // Rule 1: known_at before commit 1 (09:00:00)
-    if (knownAt === '09:00:00') {
-      statusEl.textContent = 'TR_E_BEYOND_CURSOR';
-      statusEl.className = 'result-status status-error';
-      contentEl.innerHTML = `<div style="color: var(--accent-rose); font-family: var(--font-mono); font-size: 13px;">
-        error: BEYOND_CURSOR: trades: at is beyond the event cursor (cursor 09:00:00)
-      </div>`;
-      return;
-    }
-
-    // Rule 2: Future window query
-    if (atTime === '11:30:00') {
-      statusEl.textContent = 'TR_E_BEYOND_CURSOR';
-      statusEl.className = 'result-status status-error';
-      contentEl.innerHTML = `<div style="color: var(--accent-rose); font-family: var(--font-mono); font-size: 13px;">
-        error: BEYOND_CURSOR: query timestamp 11:30:00 is ahead of cursor at selected snapshot.
-      </div>`;
-      return;
-    }
-
-    // Normal historical query results
-    statusEl.className = 'result-status status-ok';
-
-    if (knownAt === '10:01:00') {
-      // Commit 2 snapshot
-      if (atTime === '10:00:00' || atTime === '10:00:00.500') {
-        statusEl.textContent = 'OK (Commit @1 snapshot)';
-        contentEl.innerHTML = `<table class="data-table">
-          <thead><tr><th>window</th><th>sym</th><th>volume</th><th>turnover</th><th>value (VWAP)</th></tr></thead>
-          <tbody><tr><td>2026-09-27T10:00:00</td><td>AAPL</td><td>100</td><td>20000</td><td><strong style="color: var(--accent-cyan);">200.00</strong></td></tr></tbody>
-        </table>`;
-      } else {
-        statusEl.textContent = 'OK (Commit @2 snapshot: Both original trades)';
-        contentEl.innerHTML = `<table class="data-table">
-          <thead><tr><th>window</th><th>sym</th><th>volume</th><th>turnover</th><th>value (VWAP)</th></tr></thead>
-          <tbody><tr><td>2026-09-27T10:00:00</td><td>AAPL</td><td>200</td><td>40200</td><td><strong style="color: var(--accent-cyan);">201.00</strong></td></tr></tbody>
-        </table>`;
-      }
-    } else if (knownAt === '10:05:30') {
-      // Commit 3 snapshot: after price correction to 204
-      if (atTime === '10:00:00' || atTime === '10:00:00.500') {
-        statusEl.textContent = 'OK (Prefix excludes 10:00:01 trade)';
-        contentEl.innerHTML = `<table class="data-table">
-          <thead><tr><th>window</th><th>sym</th><th>volume</th><th>turnover</th><th>value (VWAP)</th></tr></thead>
-          <tbody><tr><td>2026-09-27T10:00:00</td><td>AAPL</td><td>100</td><td>20000</td><td><strong style="color: var(--accent-cyan);">200.00</strong></td></tr></tbody>
-        </table>`;
-      } else {
-        statusEl.textContent = 'OK (Commit @3 snapshot: Trade 2 price @ 204)';
-        contentEl.innerHTML = `<table class="data-table">
-          <thead><tr><th>window</th><th>sym</th><th>volume</th><th>turnover</th><th>value (VWAP)</th></tr></thead>
-          <tbody><tr><td>2026-09-27T10:00:00</td><td>AAPL</td><td>200</td><td>40400</td><td><strong style="color: var(--accent-cyan);">202.00</strong></td></tr></tbody>
-        </table>`;
-      }
-    } else {
-      // Commit 4 / Latest snapshot: Trade 1 retracted
-      statusEl.textContent = 'OK (Commit @4: Trade 1 retracted, Trade 2 @ 204)';
-      contentEl.innerHTML = `<table class="data-table">
-        <thead><tr><th>window</th><th>sym</th><th>volume</th><th>turnover</th><th>value (VWAP)</th></tr></thead>
-        <tbody><tr><td>2026-09-27T10:00:00</td><td>AAPL</td><td>100</td><td>20400</td><td><strong style="color: var(--accent-cyan);">204.00</strong></td></tr></tbody>
-      </table>`;
     }
   }
 
@@ -1483,19 +1422,6 @@ AAPL 2      1         5
       location.hash = '#explorer';
     });
 
-    // Explorer Stepper Cards
-    document.querySelectorAll('.step-card').forEach(card => {
-      card.addEventListener('click', () => {
-        updateExplorerStep(parseInt(card.dataset.step));
-      });
-    });
-
-    document.getElementById('btnResetExplorer').addEventListener('click', () => {
-      updateExplorerStep(0);
-    });
-
-    document.getElementById('btnRunTimeTravel').addEventListener('click', runTimeTravelQuery);
-
     // Playground Actions
     document.getElementById('sampleSelect').addEventListener('change', (e) => {
       loadPlaygroundSample(e.target.value);
@@ -1514,6 +1440,12 @@ AAPL 2      1         5
         e.preventDefault();
         runPlaygroundScript();
       }
+    });
+
+    let ttResize;
+    window.addEventListener('resize', () => {
+      clearTimeout(ttResize);
+      ttResize = setTimeout(() => { if (location.hash === '#explorer') renderTimeTravel(); }, 150);
     });
 
     // Route on initial load & hashchange

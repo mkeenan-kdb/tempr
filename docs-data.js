@@ -4,12 +4,12 @@ window.TEMPR_DOCS = [
   {
     "id": "00-introduction",
     "title": "Overview",
-    "content": "# Live analytics for changing data.\n\n**tempr is a small, embeddable engine for analytics over changing event data.** Send it events, define a view, and it keeps the answer up to date\u2014even when an event arrives late, gets corrected, or is deleted. You can also ask what the answer was before a correction arrived.\n\nRun the binary to try its query language, or link the C library into your application. No database server to set up.\n\n<div class=\"reference-meta\"><span>CLI + C library</span><span>Incremental views</span><span>Time-travel queries</span><span>Local persistence</span></div>\n\n<div class=\"start-grid\"><a href=\"#doc/first-system\"><span class=\"card-number\">START BUILDING</span><strong>Your first analytics system</strong><span>Create a stream, calculate a live VWAP, correct a trade, and restart with your data intact.</span><b>Follow the walkthrough \u2192</b></a><a href=\"#doc/08-benchmarks\"><span class=\"card-number\">SEE THE NUMBERS</span><strong>Benchmarked on real trades</strong><span>Ingestion, corrections, durability and joins, compared across six engines.</span><b>Explore benchmarks \u2192</b></a></div>\n\n## A quick look at performance\n\n<div class=\"benchmark-highlights\"><a href=\"#doc/08-benchmarks#recorded-vwap-comparison\"><strong>11.68M</strong><span>ops/s \u00b7 maintained VWAP</span></a><a href=\"#doc/08-benchmarks#recorded-vwap-comparison\"><strong>9.63M</strong><span>ops/s \u00b7 corrections & deletes</span></a><a href=\"#doc/08-benchmarks#recorded-vwap-comparison\"><strong>2.53M</strong><span>ops/s \u00b7 durable group commit</span></a></div>\n\nRecorded on an Apple M2: 100,000 trades, batches of 500, median of three runs. The durable result uses 1 MB group commit; throughput is not acknowledgement latency. [Full results, comparisons and methodology](#doc/08-benchmarks).\n\n## What does it do?\n\nImagine a stream of trades feeding an hourly average price. A trade is later corrected. You want the live average to change, but you also want to know what you were showing before the correction.\n\nWith tempr, you define the calculation once:\n\n```tempr\nview vwap = trades\n  |> tumble 1h on event_time\n  |> group window, sym\n  |> aggregate volume = sum(size), turnover = sum(price * size)\n  |> derive value = turnover / volume\n```\n\nThen insert, correct or delete events. The view updates incrementally, and subscribers receive the changes. You can query both the latest value and an earlier answer within retained history.\n\n```tempr\n# Amend trade 2; revision 1 is the version we expect to replace.\ncorrect trades 2 rev 1 {price: 204}\n\n# What is the answer now? What did we know at 10:01?\nvwap\nvwap at 10:00:01 known_at 10:01:00\n```\n\nThe [first-system walkthrough](#doc/first-system) supplies the stream definition, input data and commands to run this yourself.\n\n## What can you build?\n\n| Build | Use tempr to\u2026 |\n| --- | --- |\n| Live trade analytics | Maintain volume, turnover and VWAP through late trades, amendments and busts |\n| Event enrichment | Join a trade to the latest quote at its event time using an as-of join |\n| Operational metrics | Update windowed counts and sums when telemetry is corrected or retracted |\n| Historical explanations | Reconstruct a retained answer as it was known at a particular time or commit |\n| An embedded analytics component | Call the C API in your own process and subscribe to changes |\n\n## How tempr fits into your workflow\n\ntempr is an **embedded C11 engine with zero external runtime dependencies**. It is not a distributed cluster or a background daemon with open network ports; it runs in-process or as a standalone CLI tool.\n\n### 1. In-process C/C++ analytics component\n\nLink `libtempr.a` directly into your trading gateway, market data feed handler, or telemetry pipeline. Events are passed as in-memory structs without serialization overhead.\n\n```text\n[Exchange / Feed Handler]\n           \u2502 (In-memory C structs)\n           \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502     Your Process        \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510  \u2502\n\u2502  \u2502   tempr engine    \u2502  \u2502 \u25c4\u2500\u2500 Sub-microsecond incremental updates\n\u2502  \u2502   (libtempr.a)    \u2502  \u2502 \u25c4\u2500\u2500 In-memory state + local WAL persistence\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518  \u2502\n\u2502            \u2502            \u2502\n\u2502            \u25bc            \u2502\n\u2502    tr_subscribe()       \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n             \u2502 (Atomic delta callbacks)\n             \u25bc\n[Trading Strategy / Risk Dashboard]\n```\n\n- **Why it fits:** Eliminates database hops and IPC serialization for hot-path analytics. Your application stays in control of threads, memory caps, and batch flushing.\n\n### 2. Streaming event enrichment (Real-time as-of joins)\n\nIn electronic trading and IoT, measurements from separate sensors or quote books arrive asynchronously. An **as-of join** matches each trade to the prevailing quote effective at its event time:\n\n```text\nQuotes:  \u2500\u2500[10:00:00.050 Bid:200.00]\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500[10:00:01.150 Bid:202.00]\u2500\u2500\u25ba\n                                     \u25b2\nAs-Of Match:                         \u2502 Prevailing quote at trade time\n                                     \u25bc\nTrades:  \u2500\u2500\u2500\u2500(10:00:00.100 AAPL)\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500(10:00:01.200 AAPL)\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba\n                                     \u2502\n                                     \u25bc\nEnriched: AAPL 100 @ 202.00, PrevQuote: 202.00 (Match Latency: <1\u00b5s)\n```\n\n- **Why it fits:** Incremental as-of joins maintain active states with bounded memory, handling late quotes and right-side corrections automatically without full-stream reprocessing.\n\n### 3. Standalone UNIX pipe or microservice component\n\nFor Python, Go, Node.js, or shell environments, run the standalone `tempr` binary as a persistent stream processor over standard input and output:\n\n```sh\ncat trades.json | my_adapter | tempr --data ./prod-data setup.tr\n```\n\n- **Why it fits:** Easy to embed into existing Kafka consumer loops or cron workflows without writing C code.\n\n## The two dimensions of time\n\nTraditional streaming tools conflate when an event happened with when the system processed it. tempr tracks both explicitly:\n\n1. **Event Time (Valid Time):** When the trade or reading occurred in the real world.\n2. **Knowledge Time (Transaction Time):** When tempr recorded the commit or its subsequent amendment.\n\n```text\nKnowledge Time (K)\n       \u25b2\n10:05  \u2502               [Commit 3: Correct Trade 2 to $204]\n       \u2502                    \u2502\n10:01  \u2502    [Commit 2: Trade 2 @ $202]\n       \u2502         \u2502\n10:00  \u2502    [Commit 1: Trade 1 @ $200]\n       \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25ba Event Time (T)\n            10:00:00        10:00:01\n```\n\n- **Current query (`vwap`):** Reconstructs the latest known state at $202.00.\n- **Historical time-travel query (`vwap at 10:00:01 known_at 10:01:00`):** Reconstructs the answer before the amendment ($201.00), giving algorithmic traders and compliance officers verifiable point-in-time auditability.\n\n## Choose how to use it\n\n**Start with the CLI.** Download the binary for your platform, write a short script and inspect the results. The walkthrough takes you from an empty directory to a persistent analytics system without writing C.\n\n**Embed it when you are ready.** Link the library and public header into your C or C++ application. The [C quickstart](#doc/quickstart) shows subscriptions, corrections and historical queries in one complete program. The [API reference](#doc/05-c-api-reference) covers the building blocks.\n\n[Download tempr](#doc/01-getting-started) \u00b7 [Build your first system](#doc/first-system) \u00b7 [Browse recipes](#doc/10-advanced-recipes)\n\n## Release notes\n\nCurrent release: `0.1.0`. Binary packages for supported platforms are published on the [installation page](#doc/01-getting-started). See [release and compatibility](#doc/release) for details, and [running your system](#doc/11-operations) when designing for production operations.\n"
+    "content": "# Live analytics for changing data.\n\n**tempr is a small, embeddable engine for analytics over event data that changes.** Define a view once, then send it events. It keeps the answer up to date, even when an event arrives late, is corrected or is deleted, and it can tell you what the answer was before each change.\n\nIt's one binary and one C library. There is no server to run and nothing else to install.\n\n<div class=\"reference-meta\"><span>CLI + C library</span><span>Incremental views</span><span>Time-travel queries</span><span>Local persistence</span><span class=\"preview-label\">Experimental</span></div>\n\n<div class=\"start-grid\"><a href=\"#doc/first-system\"><span class=\"card-number\">10 MINUTES</span><strong>Build your first system</strong><span>Create a stream, calculate a live VWAP, correct a trade, look back at the old answer and restart with your data intact.</span><b>Follow the walkthrough \u2192</b></a><a href=\"#explorer\"><span class=\"card-number\">NO INSTALL</span><strong>Explore time travel</strong><span>Click through late trades, corrections and busts, and see the engine's answer at every point in event and knowledge time.</span><b>Open the demo \u2192</b></a></div>\n\n## Try it in a minute\n\nOn a Mac with Apple Silicon:\n\n```sh\ncurl -LO https://github.com/mkeenan-kdb/tempr/releases/download/v0.1.0/tempr-0.1.0-macos-arm64.tar.gz\ntar -xzf tempr-0.1.0-macos-arm64.tar.gz && cd tempr-0.1.0-macos-arm64\n./bin/tempr\n```\n\nAt the prompt, type `help`, or paste the statements from [your first system](#doc/first-system). Want Linux or Intel Mac builds? [Open an issue](https://github.com/mkeenan-kdb/tempr/issues) and say which.\n\n## What it looks like\n\nA stream of trades feeds an hourly volume-weighted average price. You write the calculation once:\n\n```tempr\nview vwap = trades\n  |> tumble 1h on event_time\n  |> group window, sym\n  |> aggregate volume = sum(size), turnover = sum(price * size)\n  |> derive value = turnover / volume\n```\n\nThen insert, correct or delete trades. The view updates incrementally, and subscribers receive each change as one transaction. The old answers stay queryable:\n\n```tempr\n# Trade 2 should have been 204. Revision 1 is the version we expect to replace.\ncorrect trades 2 rev 1 {price: 204}\n\nvwap                                   # the answer now: 202\nvwap at 10:00:01 known_at 10:01:00     # what we showed before the correction: 201\n```\n\n## The numbers\n\n<div class=\"benchmark-highlights\"><a href=\"#doc/08-benchmarks#keeping-an-as-of-join-up-to-date\"><strong>47\u00d7</strong><span>faster than kdb+ keeping a 2.5M-operation as-of join up to date</span></a><a href=\"#doc/08-benchmarks#live-vwap-across-six-engines\"><strong>9.63M</strong><span>operations/sec, live VWAP with corrections and deletes</span></a><a href=\"#doc/08-benchmarks#keeping-every-version-tempr-and-kdb\"><strong>35 ms</strong><span>to answer \"as of commit S\" over a million trades</span></a></div>\n\nMeasured on an Apple M2 against kdb+, DuckDB, SQLite, Polars and pandas, with every answer checked against an independent reference. kdb+ and Polars win some tests, and the [benchmarks page](#doc/08-benchmarks) shows those too.\n\n## Two kinds of time\n\nMost streaming tools mix up when something happened and when the system heard about it. tempr keeps both:\n\n- **Event time:** when the trade happened.\n- **Knowledge time:** when tempr committed it, or a later correction to it.\n\nSo you can ask `vwap at T known_at K`: \"for events up to T, what did we believe at K?\" That is how you explain a number you published yesterday, and how you tell a late trade from a correction. The [time-travel demo](#explorer) lets you try every combination on a small example.\n\n## What can you build?\n\n| Build | Use tempr to\u2026 |\n| --- | --- |\n| Live trade analytics | Maintain volume, turnover and VWAP through late trades, amendments and busts |\n| Event enrichment | Join each trade to the prevailing quote at its event time, with an as-of join |\n| Operational metrics | Keep windowed counts and sums right when telemetry is corrected or retracted |\n| Audit and explanation | Reconstruct an answer as it was known at a given time or commit |\n| An embedded component | Call the C API in your own process and subscribe to changes |\n\n## Three ways to run it\n\n**Interactively.** Run `./bin/tempr` and type statements, or pass script files. This is the quickest way to learn the language.\n\n**As a pipeline stage.** Load your definitions, then keep reading statements from standard input:\n\n```sh\nmy_feed_adapter | ./bin/tempr --data ./data setup.tr -i\n```\n\n`--data` makes it durable: after a restart, the same command recovers the saved state.\n\n**Inside your program.** Link `libtempr.a`, pass events as C structs and subscribe to view changes. There's no serialization and no network hop. Your application keeps control of threads, memory caps and when to flush. The [C quickstart](#doc/quickstart) is one complete program.\n\nAn as-of join matches each trade to the latest quote at or before its time, and a late quote re-matches only the trades it affects:\n\n```text\nQuotes:   \u2500\u2500[10:00:00.050 bid 200.00]\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500[10:00:01.150 bid 202.00]\u2500\u2500\u25ba\n                         \u2502                              \u2502\nTrades:   \u2500\u2500\u2500\u2500(10:00:00.100 AAPL)\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500(10:00:01.200 AAPL)\u2500\u2500\u2500\u2500\u2500\u2500\u25ba\n                         \u25bc                              \u25bc\nEnriched:     100 @ 200.10, bid 200.00          100 @ 202.20, bid 202.00\n```\n\n## Before you rely on it\n\ntempr is an experimental project, shared so people can try it. It is single-threaded (serialize your calls), keeps retained history in memory, and has no replication or automatic upgrade of its data files. It has been tested for correctness and recovery, but has not yet been run for days on production hardware. [Release and compatibility](#doc/release) lists the current limits, and [running your system](#doc/11-operations) covers retention, backpressure and recovery.\n\n## Tell us what you build\n\nThis release is for finding out what people want from it. [Open an issue](https://github.com/mkeenan-kdb/tempr/issues) for bugs, confusing docs, missing platforms or features you need. For bugs, include your platform, the smallest input that shows the problem, and what you expected to see.\n"
   },
   {
     "id": "08-benchmarks",
     "title": "Benchmarks",
-    "content": "# Benchmarks\n\nHow does tempr perform on live analytics? These benchmarks compare VWAP aggregation and as-of joins across tempr, kdb+, DuckDB, SQLite, Polars and pandas, including corrections and durable writes.\n\n## At a glance\n\nOn the recorded Apple M2 workload, tempr maintained VWAP at **11.68 million operations/sec**, processed corrections and deletes at **9.63 million operations/sec**, and reached **2.53 million operations/sec** with durable group commit. For the 253,754-operation as-of workload, maintained results took **0.065 seconds**. The tables below show where other engines are faster too.\n\nMeasurements were recorded on 28 September 2026. Throughput, batch latency and durable acknowledgement latency measure different things; use the workload and configuration below when interpreting the numbers.\n\n## Recorded VWAP comparison\n\nApple M2 (8 cores), macOS 26.5.2, Apple clang 17; tempr `0.1.0-dev` from the development tree based on `8a49b855`, built with `-O3 -DNDEBUG -flto`. Serial runs; CPU frequency, thermals and other host activity were uncontrolled. Medians of three runs after one discarded warm-up.\n\nInput: first 100,000 Binance ETHBTC trades of January 2024, checksum verified, batches of 500. View: hourly volume, turnover, count and VWAP. The mutation pass deletes every 20th row and reprices every other 10th row by +0.5. Final views and ten historical answers matched an independent summation reference within relative tolerance 1e-9.\n\nEngines: KDB-X 5.0 (2026.07.23, zero secondary threads), DuckDB 1.5.6, SQLite 3.45.1, Polars 1.44.2 and pandas 3.0.6. SQL/dataframe runs use Python adapters, so cross-engine totals include different integration overheads.\n\n| Mode (operations/sec) | tempr | kdb+ | DuckDB | SQLite | Polars | pandas |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| Append-only, maintained | 11,679,514 | 14,400,922 | 181,229 | 938,812 | 519,988 | 133,831 |\n| Corrections/deletes, maintained | 9,627,166 | 8,551,660 | 70,788 | 708,527 | 116,071 | 26,296 |\n| Durable, flush per batch | 139,732 | \u2014 | 171,070 * | 85,039 | \u2014 | \u2014 |\n| Durable, 1 MB group commit | 2,527,678 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 |\n\nAn em dash means the mode was not available in this comparison. Group commit acknowledges only after the flush. *DuckDB's durability figure is not equivalent to a media-flush result on this macOS host: its measured commit was about 0.19 ms, versus 3.8 ms for `F_FULLFSYNC`. Do not rank that row as an equivalent durability comparison.*\n\n## Recorded as-of join comparison\n\nSame host and engine versions, with tempr's subsequent bulk-join optimizations in the development working tree. Median of three runs. The stream contains 200,000 quotes and 50,000 trades across 100 symbols, plus corrections/deletes, for 253,754 operations. Batches contain 1,000 operations. Quotes include 2% late arrivals; both inputs include 1% corrections and 0.5% deletes. Each final result was checked row by row against an independent reference.\n\n| Mode (elapsed time) | tempr | kdb+ | DuckDB | Polars | pandas | SQLite |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| Maintained after each batch | 0.065 s | 0.386 s | 5.276 s | 0.998 s | 3.035 s | 0.640 s |\n| Maintained batch p99 | 1.257 ms | 2.989 ms | 28.84 ms | 5.992 ms | 24.08 ms | 3.291 ms |\n| Bulk: one join after loading | 20.73 ms | 6.794 ms | 15.25 ms | 5.717 ms | 21.49 ms | 43.76 ms |\n\nMaintained mode updates and delivers affected results after every batch. The comparison adapters recompute affected ranges; tempr maintains them incrementally. Bulk mode measures one join after applying all batches and excludes loading time. These modes answer different questions. Batch p99 is not per-event acknowledgement p99. These results show where incremental maintenance helps; they do not establish that tempr wins every query shape.\n\n## Measure your application\n\n| Dimension | Include in the workload |\n| --- | --- |\n| Arrival pattern | Independently paced input, bursts, queue dwell and overload |\n| Data shape | Active and lifetime keys, ordering, cross-window corrections and deletes |\n| Join work | Match fan-out, right corrections, two-source progress and retained right keys |\n| Durability | Sync mode, actual acknowledgement timing, checkpoints and restart |\n| Resources | Accounted memory, process RSS, disk use and maintenance headroom |\n| Downstream | Slow subscribers, resynchronization and sink handoff |\n\n## Current boundaries\n\nEngine calls are serialized. Historical queries and checkpoints are synchronous. Symbols are not reclaimed, and some version chains and join keys outlive nominal window retention. There is no disk spill, replication, network service protocol or automatic format migration.\n\nAs-of, window and N:1 joins are implemented. Many-to-many joins and sliding/session windows are outside the current scope. Choose tempr for correctable incremental views with explicit history and finality requirements; keep an upstream record for longer-term replay.\n"
+    "content": "# Benchmarks\n\nHow fast is tempr when data keeps changing? These runs compare it with kdb+, DuckDB, SQLite, Polars and pandas on live VWAP and as-of joins, with late data, corrections and deletes. Every run's final answers were checked row by row against an independent reference.\n\nAll figures come from one Apple M2 laptop and a pre-release build of `0.1.0`. They are development measurements, not guarantees. Where another engine is faster, the tables say so.\n\n## Keeping an as-of join up to date\n\nThis is the workload tempr was built for. Each trade is enriched with the latest quote for its symbol at or before the trade time. Quotes arrive late, and both sides get corrections and deletes. After every batch of 1,000 operations each engine brings the joined view up to date. tempr maintains the join incrementally. The other engines apply the batch, then rejoin only the trades it could have moved. Rerunning the whole join each batch is also in the table below; for DuckDB and Polars it is faster.\n\n```chart\n{\"title\": \"2.5 million operations, view maintained after every batch: total time\", \"better\": \"lower\", \"highlight\": \"tempr\",\n \"bars\": [[\"tempr\", 1.031, \"1.03 s\"], [\"SQLite\", 6.765, \"6.77 s\"], [\"kdb+\", 48.59, \"48.6 s\"], [\"Polars\", 60.62, \"60.6 s\"], [\"DuckDB\", 127, \"127 s\"], [\"pandas\", 301, \"301 s\"]],\n \"note\": \"2,000,000 quotes and 500,000 trades across 100 symbols; 2% late quotes, 1% corrections, 0.5% deletes.\"}\n```\n\n**The per-batch cost stays flat as history grows.** A change touches only the trades it can move, so tempr's slowest batches barely change between the small and large runs. Engines that re-sort or rejoin slow down as the data grows:\n\n| Slowest 1% of batches (p99) | tempr | SQLite | kdb+ | Polars | DuckDB | pandas |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| 253,754 operations | **1.26 ms** | 3.29 ms | 2.99 ms | 5.99 ms | 28.8 ms | 24.1 ms |\n| 2,537,380 operations | **1.09 ms** | 3.21 ms | 43.5 ms | 48.3 ms | 86.8 ms | 261 ms |\n\nThe full comparison at 2.5 million operations, including where others win:\n\n| Test | tempr | kdb+ | DuckDB | Polars | pandas | SQLite |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| Maintained per batch: total | **1.031 s** | 48.59 s | 127 s | 60.62 s | 301 s | 6.765 s |\n| Durable, maintained: total | **12.37 s** | \u2014 | 132 s \u2021 | \u2014 | \u2014 | 30.59 s |\n| Recomputed from scratch per batch: total | \u2014 | 120 s | 259 s | **87.81 s** | \u2014 | \u2014 |\n| Bulk: apply all batches | **0.226 s** | 11.38 s | 6.830 s | 11.53 s | 73.51 s | 3.509 s |\n| Bulk: one join over the final data | 421 ms | 99.49 ms | 317 ms | **92.18 ms** | 325 ms | 516 ms |\n\n**If you only need one join over data you already have, Polars and kdb+ are faster.** tempr's bulk join also builds the keyed state and time index it will maintain afterwards. \"\u2014\" means the engine has no such mode. \u2021 DuckDB's commit did not reach the storage media on this host (0.19 ms against 3.8 ms for a full flush), so its durable figure is not like-for-like.\n\n## Keeping every version: tempr and kdb+\n\ntempr always keeps every version of every event, so you can ask what the answer was at any earlier commit. A kdb+ real-time engine normally keeps only current rows. For a like-for-like test, kdb+ was also made to keep history: every version appended to a table tagged with its commit number. Both engines then processed one million Binance ETHBTC trades with 5% corrections and 5% deletes.\n\n```chart\n{\"title\": \"1 million trades with corrections, full history kept: operations/sec\", \"better\": \"higher\", \"highlight\": \"tempr\",\n \"bars\": [[\"tempr\", 9570877, \"9.57M/s\"], [\"kdb+\", 5153963, \"5.15M/s\"]]}\n```\n\nBoth then answered ten \"view as of commit S\" queries spread across the 4,000 commits. That is the time-travel query from the [time-travel demo](#explorer), over a real dataset:\n\n| As-of query over 1M trades | tempr | kdb+ |\n| --- | ---: | ---: |\n| Median query | **35.1 ms** | 49.9 ms |\n| Largest error against reference | 0 | 7.1e-14 |\n\nWithout history, the picture is closer. kdb+ ingests append-only data slightly faster; tempr is faster once corrections and deletes arrive:\n\n| Same 1M trades, batches of 500 | tempr | kdb+ |\n| --- | ---: | ---: |\n| In memory, inserts only | 10.82M/s | **12.05M/s** |\n| With 5% corrections and 5% deletes | **8.93M/s** | 7.80M/s |\n| Logged to disk, no flush | 6.87M/s | **7.20M/s** |\n| Full history kept, with mutations | **9.57M/s** | 5.15M/s |\n\ntempr also enforces event revisions and window finality, and its sums are exact and retractable. kdb+ does none of these here, and they cost time.\n\n## Live VWAP across six engines\n\nAn hourly volume, turnover and VWAP view over the first 100,000 Binance ETHBTC trades of January 2024, in batches of 500. The mutation pass deletes every 20th trade and reprices every other 10th.\n\n```chart\n{\"title\": \"Live VWAP with corrections and deletes: operations/sec\", \"better\": \"higher\", \"highlight\": \"tempr\",\n \"bars\": [[\"tempr\", 9627166, \"9.63M/s\"], [\"kdb+\", 8551660, \"8.55M/s\"], [\"SQLite\", 708527, \"709k/s\"], [\"Polars\", 116071, \"116k/s\"], [\"DuckDB\", 70788, \"70.8k/s\"], [\"pandas\", 26296, \"26.3k/s\"]],\n \"note\": \"SQL and dataframe engines are driven from Python, so their totals include integration overhead.\"}\n```\n\n| Mode (operations/sec) | tempr | kdb+ | DuckDB | SQLite | Polars | pandas |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| Append-only, maintained | 11,679,514 | **14,400,922** | 181,229 | 938,812 | 519,988 | 133,831 |\n| Corrections/deletes, maintained | **9,627,166** | 8,551,660 | 70,788 | 708,527 | 116,071 | 26,296 |\n| Durable, flush per batch | 139,732 | \u2014 | 171,070 \u2021 | 85,039 | \u2014 | \u2014 |\n| Durable, 1 MB group commit | 2,527,678 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 |\n\n## Durability and restart\n\ntempr writes a checksummed log and flushes it to the device before acknowledging a durable commit. On one million public trades:\n\n| Measurement | Result |\n| --- | ---: |\n| Durable ingest, 1 MB group commit | 2.13M events/sec |\n| Write a checkpoint of the retained state | 0.613 s |\n| Restart from that checkpoint | 0.096 s |\n| Restart by replaying the full 77 MB log | 0.126 s |\n| Durable single-event commits (one flush each) | 334/sec, bound by the ~3 ms device flush |\n\nGroup commit is what makes durable throughput high: many commits share one flush. Your acknowledgement latency is then the flush interval, so pick a timed flush policy for light traffic. In a 1,000-window lifecycle run with restarts every 16 windows, 99% of durable acknowledgements completed within 8.2 ms; the slowest took 26.8 ms.\n\n## How workload shape changes throughput\n\nSynthetic runs of one million inserts, with subscribers draining every change:\n\n| Profile | Operations/sec | Slowest 1% of batch calls |\n| --- | ---: | ---: |\n| Uniform, 100 symbols | 7.51M | 87 \u00b5s |\n| 100,000 symbols | 2.62M | 313 \u00b5s |\n| Plus 100,000 corrections and deletes | 6.15M | 113 \u00b5s |\n| Durable, 1 MB group commits | 2.26M | 3.8 ms |\n| Durable, flush every batch of 500 | 152k | 7.4 ms |\n\nMany distinct keys cost the most. Trade ids that arrive out of order also cost: shuffling the ids of the one-million-trade run lowered it from 10.98M to 6.48M events/sec.\n\n## Method and limits\n\n- **Host:** Apple M2 (8 cores), macOS 26.5.2, Apple clang 17. tempr built with `-O3 -DNDEBUG -flto`. Runs were serial; CPU frequency and background activity were not controlled.\n- **Engines:** KDB-X 5.0 (2026.07.23, no secondary threads), DuckDB 1.5.6, SQLite 3.45.1, Polars 1.44.2, pandas 3.0.6.\n- **Repeats:** medians of three runs after a discarded warm-up. The 2.5M-operation join is a single run.\n- **Checks:** every final view, and the sampled historical answers, matched an independent reference (relative tolerance 1e-9 for sums; exact rows for joins).\n- **Not measured yet:** Linux, multi-hour steady state, overload from an independently paced producer, and power loss. Throughput is not acknowledgement latency, and batch p99 is not per-event p99.\n\nBenchmark your own workload before relying on these numbers: arrival pattern, number of keys, correction rate, durability mode and slow subscribers all matter. [Running your system](#doc/11-operations) covers the settings.\n"
   },
   {
     "id": "01-getting-started",
@@ -231,3 +231,196 @@ window.TEMPR_DOCS = [
     "content": "# The \u00a711 Worked Example Walkthrough\n\nSection 11 of the specification defines a canonical benchmark scenario: maintaining a Volume-Weighted Average Price (VWAP) view over 1-hour tumbling windows under revisions, retractions, historical queries, and window sealing.\n\n---\n\n## The Query Pipeline\n\n```tempr\ntype Trade = {id: Int64, event_time: Timestamp, sym: Symbol, price: Float64, size: Int64}\n\nstream trades: Trade {\n  id: id, time: event_time, window: tumble(1h, origin = UTC_midnight),\n  allow_lateness: 2m, correction_grace: 10m, history_after_seal: 7d, future_skew: 1h,\n  max_pending: 1000, on_late: reject, on_closed_correction: reject,\n  cursor: knowledge, watermark: explicit\n}\n\nview vwap = trades\n  |> tumble 1h on event_time\n  |> group window, sym\n  |> aggregate volume = sum(size),\n               turnover = sum(price * size)\n  |> derive value = turnover / volume\n```\n\n---\n\n## Step-by-Step Execution Trace\n\n### Commit 1: Initial Trade\n```tempr\nclock 10:00:00.100\ninsert trades {id: 1, event_time: 10:00:00, sym: `AAPL, price: 200, size: 100}\n```\n* **Engine Action**: Inserts Trade #1 into window `[10:00:00, 11:00:00)`.\n* **View Delta Published**:\n  ```text\n  + window=10:00:00 sym=AAPL volume=100 turnover=20000 value=200\n  ```\n\n---\n\n### Commit 2: Second Trade\n```tempr\nclock 10:00:01.100\ninsert trades {id: 2, event_time: 10:00:01, sym: `AAPL, price: 202, size: 100}\n```\n* **Engine Action**: Inserts Trade #2 into window `[10:00:00, 11:00:00)`.\n* **State Update**: $\\text{volume} = 100 + 100 = 200$, $\\text{turnover} = 20000 + 20200 = 40200$. $\\text{value} = \\frac{40200}{200} = 201$.\n* **View Delta Published**:\n  ```text\n  ~ window=10:00:00 sym=AAPL volume=100 -> 200 turnover=20000 -> 40200 value=200 -> 201\n  ```\n\n---\n\n### Commit 3: Trade Correction (Amendment)\n```tempr\nclock 10:05:00\ncorrect trades 2 rev 1 {price: 204}\n```\n* **Engine Action**: Generates an atomic retraction for Trade #2 (removing $202 \\times 100$) and an insertion for its replacement (adding $204 \\times 100$).\n* **State Update**: $\\text{volume} = 200$, $\\text{turnover} = 40200 - 20200 + 20400 = 40400$. $\\text{value} = \\frac{40400}{200} = 202$.\n* **View Delta Published**:\n  ```text\n  ~ window=10:00:00 sym=AAPL volume=200 turnover=40200 -> 40400 value=201 -> 202\n  ```\n\n---\n\n### Commit 4: Trade Deletion (Retraction)\n```tempr\nclock 10:06:00\ndelete trades 1 rev 1\n```\n* **Engine Action**: Retracts Trade #1 from live view calculation ($200 \\times 100$).\n* **State Update**: $\\text{volume} = 200 - 100 = 100$, $\\text{turnover} = 40400 - 20000 = 20400$. $\\text{value} = \\frac{20400}{100} = 204$.\n* **View Delta Published**:\n  ```text\n  ~ window=10:00:00 sym=AAPL volume=200 -> 100 turnover=40400 -> 20400 value=202 -> 204\n  ```\n\n---\n\n## Bi-Temporal Historical Verification\n\nAfter Commit 4, what answers do historical queries return?\n\n| Query Statement | Target Knowledge Snapshot | Returned VWAP | Explanation |\n| :--- | :--- | :--- | :--- |\n| `vwap at 10:00:01 known_at 10:01:00` | Commit 2 (before correction) | **201** | Trade #1 ($200$) and original Trade #2 ($202$). |\n| `vwap at 10:00:01 known_at 10:05:30` | Commit 3 (after correction) | **202** | Trade #1 ($200$) and corrected Trade #2 ($204$). |\n| `vwap at 10:00:01 known_at 10:06:00` | Commit 4 (after deletion) | **204** | Trade #1 retracted; Trade #2 ($204$) remains. |\n| `vwap at 10:00:01` (latest) | Commit 4 (latest snapshot) | **204** | Matches current latest accepted reconstruction. |\n\n---\n\n## Watermark Progress & Sealing\n\n```tempr\nclock 11:10:00\nadvance trades watermark 11:10:00\n```\n* The window $[10:00:00, 11:00:00)$ closed at `11:00:00`.\n* With `correction_grace: 10m`, corrections were allowed until `11:10:00`.\n* Advancing watermark to `11:10:00` transitions the window to `TR_WIN_SEALED`.\n\n### Sealed Rejection Test\n\n```tempr\ncorrect trades 2 rev 2 {price: 1}\n# Output:\n# error: WINDOW_SEALED: trades: window is sealed (window 2026-09-27T10:00:00)\n```\n\nAttempts to alter sealed history fail closed before mutation. The engine guarantees that published financial metrics cannot be silently altered once sealed.\n"
   }
 ];
+window.TEMPR_TIMETRAVEL = {
+ "setup": "date 2026-09-28\ntype Trade = {id: Int64, event_time: Timestamp, sym: Symbol, price: Float64, size: Int64}\nstream trades: Trade {\n  id: id\n  time: event_time\n  window: tumble(1h, origin = UTC_midnight)\n  allow_lateness: 2m\n  correction_grace: 10m\n  history_after_seal: 7d\n  future_skew: 1h\n  max_pending: 1000\n  on_late: reject\n  on_closed_correction: reject\n  cursor: knowledge\n  watermark: explicit\n}\nview vwap = trades\n  |> tumble 1h on event_time\n  |> group window, sym\n  |> aggregate volume = sum(size), turnover = sum(price * size)\n  |> derive value = turnover / volume",
+ "before": "09:59:00",
+ "eventTimes": [
+  "10:00:00",
+  "10:00:10",
+  "10:00:20"
+ ],
+ "grid": {
+  "0|10:00:00": {
+   "error": "BEYOND_CURSOR",
+   "message": "trades: at is beyond the event cursor"
+  },
+  "0|10:00:10": {
+   "error": "BEYOND_CURSOR",
+   "message": "trades: at is beyond the event cursor"
+  },
+  "0|10:00:20": {
+   "error": "BEYOND_CURSOR",
+   "message": "trades: at is beyond the event cursor"
+  },
+  "1|10:00:00": {
+   "seq": 1,
+   "volume": 100,
+   "turnover": 20000.0,
+   "value": 200.0
+  },
+  "1|10:00:10": {
+   "error": "BEYOND_CURSOR",
+   "message": "trades: at is beyond the event cursor"
+  },
+  "1|10:00:20": {
+   "error": "BEYOND_CURSOR",
+   "message": "trades: at is beyond the event cursor"
+  },
+  "2|10:00:00": {
+   "seq": 2,
+   "volume": 100,
+   "turnover": 20000.0,
+   "value": 200.0
+  },
+  "2|10:00:10": {
+   "seq": 2,
+   "volume": 100,
+   "turnover": 20000.0,
+   "value": 200.0
+  },
+  "2|10:00:20": {
+   "seq": 2,
+   "volume": 200,
+   "turnover": 40200.0,
+   "value": 201.0
+  },
+  "3|10:00:00": {
+   "seq": 3,
+   "volume": 100,
+   "turnover": 20000.0,
+   "value": 200.0
+  },
+  "3|10:00:10": {
+   "seq": 3,
+   "volume": 300,
+   "turnover": 60200.0,
+   "value": 200.666666666667
+  },
+  "3|10:00:20": {
+   "seq": 3,
+   "volume": 400,
+   "turnover": 80400.0,
+   "value": 201.0
+  },
+  "4|10:00:00": {
+   "seq": 4,
+   "volume": 100,
+   "turnover": 20000.0,
+   "value": 200.0
+  },
+  "4|10:00:10": {
+   "seq": 4,
+   "volume": 300,
+   "turnover": 60200.0,
+   "value": 200.666666666667
+  },
+  "4|10:00:20": {
+   "seq": 4,
+   "volume": 400,
+   "turnover": 80600.0,
+   "value": 201.5
+  },
+  "5|10:00:00": {
+   "seq": 5,
+   "empty": true
+  },
+  "5|10:00:10": {
+   "seq": 5,
+   "volume": 200,
+   "turnover": 40200.0,
+   "value": 201.0
+  },
+  "5|10:00:20": {
+   "seq": 5,
+   "volume": 300,
+   "turnover": 60600.0,
+   "value": 202.0
+  },
+  "6|10:00:00": {
+   "seq": 6,
+   "empty": true
+  },
+  "6|10:00:10": {
+   "seq": 6,
+   "volume": 200,
+   "turnover": 40200.0,
+   "value": 201.0
+  },
+  "6|10:00:20": {
+   "seq": 6,
+   "volume": 300,
+   "turnover": 60600.0,
+   "value": 202.0
+  }
+ },
+ "commits": [
+  {
+   "known": "10:00:00",
+   "statement": "insert trades {id: 1, event_time: 10:00:00, sym: `AAPL, price: 200, size: 100}",
+   "op": [
+    "new",
+    1,
+    "10:00:00",
+    200,
+    100
+   ],
+   "caption": "Trade 1 arrives"
+  },
+  {
+   "known": "10:00:20",
+   "statement": "insert trades {id: 2, event_time: 10:00:20, sym: `AAPL, price: 202, size: 100}",
+   "op": [
+    "new",
+    2,
+    "10:00:20",
+    202,
+    100
+   ],
+   "caption": "Trade 2 arrives"
+  },
+  {
+   "known": "10:02:00",
+   "statement": "insert trades {id: 3, event_time: 10:00:10, sym: `AAPL, price: 201, size: 200}",
+   "op": [
+    "new",
+    3,
+    "10:00:10",
+    201,
+    200
+   ],
+   "caption": "Trade 3 arrives late: it happened at 10:00:10"
+  },
+  {
+   "known": "10:05:00",
+   "statement": "correct trades 2 rev 1 {price: 204}",
+   "op": [
+    "correct",
+    2,
+    204
+   ],
+   "caption": "Trade 2 corrected to 204"
+  },
+  {
+   "known": "10:06:00",
+   "statement": "delete trades 1 rev 1",
+   "op": [
+    "delete",
+    1
+   ],
+   "caption": "Trade 1 busted (deleted)"
+  },
+  {
+   "known": "11:15:00",
+   "statement": "advance trades watermark 11:15:00",
+   "op": null,
+   "caption": "Watermark passes the grace period: 10:00 window sealed"
+  }
+ ],
+ "rejected": {
+  "known": "11:20:00",
+  "statement": "correct trades 3 rev 1 {price: 199}",
+  "caption": "A late correction to trade 3 is refused",
+  "error": "WINDOW_SEALED",
+  "message": "trades: window is sealed (window 2026-09-28T10:00:00)"
+ }
+};
