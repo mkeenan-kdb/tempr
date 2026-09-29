@@ -48,10 +48,10 @@ Recorded on Apple M2, 2026-09-29. VWAP rows: 100,000 Binance ETHBTC trades in ba
 
 ### 1. Download Pre-Built Binaries
 
-Download official standalone release packages from [Releases](https://github.com/mkeenan-kdb/tempr/releases):
+Download official standalone release packages from [Releases](https://github.com/mkeenan-kdb/tempr/releases): `macos-arm64`, `linux-x86_64` and `linux-arm64`. The Linux packages need glibc 2.34+ (Ubuntu 22.04+, Debian 12+, RHEL 9+, Amazon Linux 2023).
 
 ```sh
-# Example: macOS ARM64 (Apple Silicon)
+# Example: macOS ARM64 (Apple Silicon); substitute your platform
 curl -LO https://github.com/mkeenan-kdb/tempr/releases/download/v0.1.0/tempr-0.1.0-macos-arm64.tar.gz
 tar -xzf tempr-0.1.0-macos-arm64.tar.gz
 cd tempr-0.1.0-macos-arm64/
