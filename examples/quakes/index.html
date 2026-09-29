@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tempr quakes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd;
+  --auto:#d97706; --rev:#0f766e; --accent:#2563eb; --ghost:#cfcfc8; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151514; --panel:#1e1e1c; --ink:#ecebe6;
+  --muted:#9a9a93; --line:#33332f; --auto:#f59e0b; --rev:#2dd4bf; --accent:#60a5fa; --ghost:#3d3d38; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, sans-serif }
+header { padding:16px 20px 8px; display:flex; flex-wrap:wrap; gap:8px 20px; align-items:baseline }
+h1 { font-size:18px; margin:0 } h2 { font-size:13px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted) }
+.status { color:var(--muted) } .status b { color:var(--ink); font-weight:600 }
+.err { color:#dc2626 }
+main { display:grid; gap:12px; padding:0 20px 20px; grid-template-columns:minmax(0,2fr) minmax(0,1fr) }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px }
+#map { height:420px; border-radius:6px } .wide { grid-column:1 / -1 }
+@media (max-width: 860px) { main { grid-template-columns:1fr; padding:0 12px 12px } #map { height:300px } }
+.travel { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center }
+.travel input[type=range] { flex:1; min-width:200px }
+button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer }
+button:hover { border-color:var(--accent) }
+#when { font-variant-numeric:tabular-nums; font-weight:600 }
+#revisions { max-height:420px; overflow:auto; margin:0; padding:0; list-style:none }
+#revisions li { padding:6px 0; border-bottom:1px solid var(--line) }
+#revisions li.future { opacity:.35 }
+#revisions .t { color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums }
+th, td { text-align:left; padding:3px 8px 3px 0; border-bottom:1px solid var(--line); white-space:nowrap }
+td.n { text-align:right }
+.legend { display:flex; gap:14px; color:var(--muted); font-size:12px; margin-top:6px; flex-wrap:wrap }
+.dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle }
+svg text { fill:var(--muted); font-size:11px }
+#query { display:flex; gap:8px } #query input { flex:1; font:13px ui-monospace, monospace; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink) }
+#result { overflow:auto; max-height:320px; margin-top:8px; font-size:13px }
+.presets button { font-size:12px; margin:6px 6px 0 0 }
+p.note { color:var(--muted); margin:6px 0 0; max-width:75ch }
+</style>
+</head>
+<body>
+<header>
+  <h1>tempr · live earthquakes</h1>
+  <span class="status" id="status">connecting…</span>
+</header>
+<main>
+  <section class="panel wide">
+    <div class="travel">
+      <span>As known at <span id="when">—</span></span>
+      <input id="slider" type="range" min="0" max="1000" value="1000" aria-label="Knowledge time">
+      <button id="live">Live</button>
+    </div>
+    <p class="note">USGS publishes quakes within minutes, then revises them: reviewers correct magnitudes and locations, and delete false detections. tempr keeps every version. Drag back to see the map, counts and hourly totals exactly as they were known then.</p>
+  </section>
+  <section class="panel">
+    <div id="map"></div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--auto)"></span>automatic</span>
+      <span><span class="dot" style="background:var(--rev)"></span>reviewed</span>
+      <span><span class="dot" style="border:2px solid var(--accent)"></span>revised since first seen</span>
+      <span id="count"></span>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Revisions, as tempr publishes them</h2>
+    <ul id="revisions"><li class="t">Waiting for USGS to revise something: typically several an hour.</li></ul>
+  </section>
+  <section class="panel">
+    <h2>Quakes per hour (UTC)</h2>
+    <svg id="hourly" width="100%" height="170" role="img" aria-label="Quakes per hour"></svg>
+    <div class="legend"><span><span class="dot" style="background:var(--accent)"></span>as known at the slider</span>
+      <span><span class="dot" style="background:var(--ghost)"></span>as known now: late arrivals fill in past hours</span></div>
+  </section>
+  <section class="panel">
+    <h2>Regions</h2>
+    <table id="regions"></table>
+  </section>
+  <section class="panel wide">
+    <h2>Ask tempr</h2>
+    <form id="query"><input id="q" value="regions" spellcheck="false" aria-label="Query"><button>Run</button></form>
+    <div class="presets"></div>
+    <div id="result"></div>
+  </section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const ms = s => Date.parse(s + 'Z'), iso = t => new Date(t).toISOString().slice(0, 23);
+const hhmm = s => s ? s.slice(11, 19) : '—';
+let range = null, live = true, liveState = null, timer = null;
+
+let map = null, layer = null;
+if (window.L) {
+  map = L.map('map', {worldCopyJump: true}).setView([30, -150], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom: 8, attribution: '&copy; OpenStreetMap contributors · data: USGS'}).addTo(map);
+  layer = L.layerGroup().addTo(map);
+} else $('#map').textContent = 'Map library unavailable offline; everything else works.';
+
+async function load(knownAt) {
+  const r = await fetch('/api/state' + (knownAt ? '?known_at=' + encodeURIComponent(knownAt) : ''));
+  return r.json();
+}
+
+function render(s, knownAt) {
+  if (s.error && !s.quakes) { $('#status').innerHTML = `<span class="err">${esc(s.error)}</span>`; return; }
+  $('#status').innerHTML = `${s.replay ? 'replaying a recording' : 'polling USGS every minute'} · <b>${s.polls}</b> snapshots · latest ${hhmm(s.last_known)} UTC` +
+    (s.error ? ` · <span class="err">last poll failed: ${esc(s.error)}</span>` : '');
+  if (s.first_known) range = [ms(s.first_known), ms(s.last_known)];
+  const k = knownAt || s.last_known;
+  $('#when').textContent = k ? k.replace('T', ' ').slice(0, 19) + ' UTC' + (live ? ' (live)' : '') : '—';
+  const cols = getComputedStyle(document.documentElement);
+  const auto = cols.getPropertyValue('--auto').trim(), rev = cols.getPropertyValue('--rev').trim(),
+        accent = cols.getPropertyValue('--accent').trim();
+  if (layer) {
+    layer.clearLayers();
+    for (const q of s.quakes) {
+      const m = q.mag ?? 0, c = q.status === 'reviewed' ? rev : auto;
+      L.circleMarker([q.lat, q.lon], {radius: 3 + Math.max(0, m) * 2.2, color: q.version > 1 ? accent : c,
+        weight: q.version > 1 ? 2.5 : 1, fillColor: c, fillOpacity: .55})
+        .bindTooltip(`M${q.mag ?? '?'} · ${esc(q.place)}<br>${q.time.replace('T', ' ').slice(0, 19)} UTC · ${q.status}` +
+          (q.version > 1 ? `<br>revised ${q.version - 1}×` : ''))
+        .addTo(layer);
+    }
+  }
+  const revised = s.quakes.filter(q => q.version > 1).length;
+  $('#count').textContent = `${s.quakes.length} quakes, ${revised} revised`;
+  const kt = k ? ms(k) : Infinity;
+  $('#revisions').innerHTML = s.revisions.length ? s.revisions.slice().reverse().map(r =>
+    `<li class="${ms(r.known) > kt ? 'future' : ''}"><span class="t">${hhmm(r.known)} · commit ${r.commit}</span><br>
+     <b>M${r.mag ?? '?'}</b> ${esc(r.place)}<br>${r.what.map(esc).join(' · ')}</li>`).join('')
+    : '<li class="t">Waiting for USGS to revise something: typically several an hour.</li>';
+  const top = s.regions.slice().sort((a, b) => b.n - a.n).slice(0, 12);
+  $('#regions').innerHTML = '<tr><th>Region</th><th>Quakes</th><th>Avg mag</th></tr>' + top.map(r =>
+    `<tr><td>${esc(r.region)}</td><td class="n">${r.n}</td><td class="n">${r.avg_mag == null ? '' : r.avg_mag.toFixed(2)}</td></tr>`).join('');
+  drawHourly(s.hourly, liveState ? liveState.hourly : s.hourly);
+}
+
+function drawHourly(at, now) {
+  const svg = $('#hourly'), W = svg.clientWidth || 400, H = 170, pad = 22;
+  const hours = [...new Set([...at, ...now].map(h => h.window))].sort().slice(-24);
+  const get = (list, w) => (list.find(h => h.window === w) || {n: 0}).n;
+  const max = Math.max(1, ...hours.map(w => Math.max(get(at, w), get(now, w))));
+  const bw = (W - pad) / Math.max(hours.length, 1);
+  let out = '';
+  hours.forEach((w, i) => {
+    const x = pad + i * bw, hn = get(now, w) / max * (H - 30), ha = get(at, w) / max * (H - 30);
+    out += `<rect x="${x + 1}" y="${H - 18 - hn}" width="${bw - 2}" height="${hn}" fill="var(--ghost)"/>`;
+    out += `<rect x="${x + 1}" y="${H - 18 - ha}" width="${bw - 2}" height="${ha}" fill="var(--accent)"><title>${w.slice(11, 16)} UTC: ${get(at, w)} then, ${get(now, w)} now</title></rect>`;
+    if (i % 3 === 0) out += `<text x="${x}" y="${H - 4}">${w.slice(11, 13)}h</text>`;
+  });
+  out += `<text x="0" y="12">${max}</text>`;
+  svg.innerHTML = out;
+}
+
+async function refresh() {
+  const s = await load();
+  liveState = s;
+  if (live) { render(s); if (s.first_known) $('#slider').value = 1000; }
+}
+
+let debounce = null;
+$('#slider').addEventListener('input', e => {
+  if (!range) return;
+  live = +e.target.value === 1000;
+  clearTimeout(debounce);
+  debounce = setTimeout(async () => {
+    if (live) return refresh();
+    const k = iso(range[0] + (range[1] - range[0]) * e.target.value / 1000);
+    render(await load(k), k);
+  }, 120);
+});
+$('#live').onclick = () => { live = true; $('#slider').value = 1000; refresh(); };
+
+const presets = ['regions', 'hourly', 'latest', 'explain hourly', 'show'];
+$('.presets').innerHTML = presets.map(p => `<button type="button">${p}</button>`).join('') +
+  '<button type="button" data-k="1">hourly known_at 10 min ago</button>';
+$('.presets').onclick = e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  $('#q').value = e.target.dataset.k ? `hourly known_at ${iso(Date.now() - 600000)}` : e.target.textContent;
+  $('#query').requestSubmit();
+};
+$('#query').onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch('/api/query', {method: 'POST', body: $('#q').value});
+  const out = await r.json();
+  $('#result').innerHTML = (Array.isArray(out) ? out : [out]).map(m =>
+    m.rows ? `<table><tr>${m.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr>` +
+      m.rows.map(row => `<tr>${row.map(v => `<td>${esc(v ?? 'null')}</td>`).join('')}</tr>`).join('') +
+      `</table><p class="note">${m.rows.length} rows at commit ${m.commit}</p>`
+    : m.text ? `<pre>${esc(m.text)}</pre>` : m.error ? `<p class="err">${esc(m.error)}</p>` : '').join('');
+};
+
+refresh();
+timer = setInterval(refresh, 10000);
+</script>
+</body>
+</html>

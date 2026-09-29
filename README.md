@@ -63,6 +63,7 @@ Package contents:
 - `lib/libtempr.a`: Static C library
 - `lib/libtempr.0.dylib` (or `.so`): Shared C library
 - `lib/pkgconfig/tempr.pc`: pkg-config definition
+- `examples/wikipedia/`, `examples/quakes/`: live demos on local web pages: `python3 examples/wikipedia/wikipedia.py`
 
 ### 2. Verify Binary
 

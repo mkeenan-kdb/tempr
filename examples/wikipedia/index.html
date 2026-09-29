@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tempr wikipedia</title>
+<style>
+:root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd;
+  --human:#2563eb; --bot:#93c5fd; --rev:#dc2626; --ghost:#d6d5cf; --flash:#f59e0b; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151514; --panel:#1e1e1c; --ink:#ecebe6;
+  --muted:#9a9a93; --line:#33332f; --human:#60a5fa; --bot:#1e3a8a; --rev:#f87171; --ghost:#3a3a35; --flash:#fbbf24; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, sans-serif }
+header { padding:16px 20px 4px; display:flex; flex-wrap:wrap; gap:6px 18px; align-items:baseline }
+h1 { font-size:18px; margin:0 } h2 { font-size:13px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted) }
+.muted { color:var(--muted) } .err { color:var(--rev) }
+main { display:grid; gap:12px; padding:8px 20px 20px; grid-template-columns:minmax(0,2fr) minmax(0,1fr) }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px }
+.wide { grid-column:1 / -1 }
+@media (max-width: 860px) { main { grid-template-columns:1fr; padding:8px 12px 12px } }
+.stats { display:flex; flex-wrap:wrap; gap:10px 28px }
+.stat b { display:block; font-size:26px; font-variant-numeric:tabular-nums; line-height:1.1 }
+.stat span { color:var(--muted); font-size:12px }
+.travel { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-top:10px }
+.travel input[type=range] { flex:1; min-width:200px }
+button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer }
+button:hover { border-color:var(--human) }
+#when { font-variant-numeric:tabular-nums; font-weight:600 }
+svg text { fill:var(--muted); font-size:11px }
+@keyframes flash { from { stroke:var(--flash); stroke-width:4 } to { stroke:transparent; stroke-width:0 } }
+.flash { animation:flash 3s ease-out }
+#reverts { max-height:470px; overflow:auto; margin:0; padding:0; list-style:none }
+#reverts li { padding:7px 0; border-bottom:1px solid var(--line) }
+#reverts li.new { animation:fadein 1.5s }
+@keyframes fadein { from { background:color-mix(in srgb, var(--flash) 30%, transparent) } to { background:transparent } }
+#reverts li.future { opacity:.35 }
+#reverts a { color:var(--ink) } .t { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums }
+th, td { text-align:left; padding:3px 8px 3px 0; border-bottom:1px solid var(--line); white-space:nowrap }
+td.n, th.n { text-align:right }
+.legend { display:flex; gap:14px; color:var(--muted); font-size:12px; margin-top:6px; flex-wrap:wrap }
+.dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle }
+#query { display:flex; gap:8px } #query input { flex:1; font:13px ui-monospace, monospace; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink) }
+#result { overflow:auto; max-height:320px; margin-top:8px; font-size:13px }
+.presets button { font-size:12px; margin:6px 6px 0 0 }
+p.note { color:var(--muted); margin:8px 0 0; max-width:80ch }
+</style>
+</head>
+<body>
+<header>
+  <h1>tempr · live Wikipedia edits</h1>
+  <span class="muted" id="status">connecting…</span>
+</header>
+<main>
+  <section class="panel wide">
+    <div class="stats">
+      <div class="stat"><b id="eps">–</b><span>edits per second</span></div>
+      <div class="stat"><b id="total">–</b><span>edits counted</span></div>
+      <div class="stat"><b id="botshare">–</b><span>by bots</span></div>
+      <div class="stat"><b id="nrev">–</b><span>since reverted</span></div>
+      <div class="stat"><b id="npast">–</b><span>past minutes revised</span></div>
+      <div class="stat"><b id="commit">–</b><span>tempr commits</span></div>
+    </div>
+    <div class="travel">
+      <span>As known at <span id="when">—</span></span>
+      <input id="slider" type="range" min="0" max="1000" value="1000" aria-label="Knowledge time">
+      <button id="live">Live</button>
+    </div>
+    <p class="note">Every Wikimedia wiki reports each edit within seconds. Some edits are reverted, often within seconds or minutes. tempr counts edits per minute as they arrive; when a revert arrives, it corrects that edit, so a minute already in the past changes, and its bar flashes. Drag back to see the minutes exactly as they were known then.</p>
+  </section>
+  <section class="panel">
+    <h2>Edits per minute (UTC)</h2>
+    <svg id="chart" width="100%" height="300" role="img" aria-label="Edits per minute"></svg>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--human)"></span>people</span>
+      <span><span class="dot" style="background:var(--bot)"></span>bots</span>
+      <span><span class="dot" style="background:var(--rev)"></span>later reverted (×10 for visibility)</span>
+      <span id="ghostkey" hidden><span class="dot" style="background:var(--ghost)"></span>as known now</span>
+      <span><span class="dot" style="border:2px solid var(--flash)"></span>a past minute just revised</span>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Reverts, as they arrive</h2>
+    <ul id="reverts"><li class="t">Waiting for the first revert of an edit seen here: usually a minute or two.</li></ul>
+  </section>
+  <section class="panel">
+    <h2>Wikis</h2>
+    <table id="wikis"></table>
+  </section>
+  <section class="panel">
+    <h2>Ask tempr</h2>
+    <form id="query"><input id="q" value="per_minute" spellcheck="false" aria-label="Query"><button>Run</button></form>
+    <div class="presets"></div>
+    <div id="result"></div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const ms = s => Date.parse(s + 'Z'), iso = t => new Date(t).toISOString().slice(0, 23);
+const hms = s => s ? s.slice(11, 19) : '—', fmt = n => n.toLocaleString('en');
+let range = null, live = true, nowState = null, seenRevised = {}, seenReverts = new Set();
+
+async function load(k) {
+  return (await fetch('/api/state' + (k ? '?known_at=' + encodeURIComponent(k) : ''))).json();
+}
+
+function render(s) {
+  if (s.waiting) { $('#status').textContent = 'waiting for the first second of edits…'; return; }
+  if (s.error) { $('#status').innerHTML = `<span class="err">${esc(s.error)}</span>`; return; }
+  $('#status').textContent = s.replay ? 'replaying a recording' : 'following stream.wikimedia.org';
+  range = [ms(s.first_known), ms(s.last_known)];
+  $('#when').textContent = s.known_at.replace('T', ' ').slice(0, 19) + ' UTC' + (live ? ' (live)' : '');
+  if (live) {
+    $('#eps').textContent = s.eps; $('#total').textContent = fmt(s.total.edits);
+    $('#botshare').textContent = s.total.edits ? Math.round(100 * s.total.bots / s.total.edits) + '%' : '–';
+    $('#nrev').textContent = fmt(s.total.reverted);
+    $('#npast').textContent = fmt(Object.keys(s.revised).length);
+    $('#commit').textContent = fmt(s.commits);
+  }
+  drawChart(s.minutes, live ? null : nowState && nowState.minutes, s.revised, ms(s.known_at));
+  const k = ms(s.known_at);
+  const items = (nowState || s).reverts.slice().reverse();
+  $('#reverts').innerHTML = items.length ? items.map(r => {
+    const id = r.wiki + r.rev, fresh = !seenReverts.has(id); seenReverts.add(id);
+    return `<li class="${ms(r.known) > k ? 'future' : fresh ? 'new' : ''}">
+      <span class="t">${hms(r.known)} · ${esc(r.wiki)} · reverted ${r.after_s >= 60 ? Math.floor(r.after_s / 60) + 'm ' : ''}${r.after_s % 60}s after the edit</span><br>
+      <a href="https://${esc(r.domain)}/w/index.php?diff=${r.rev}" target="_blank" rel="noopener">${esc(r.title.replace(/_/g, ' '))}</a><br>
+      <span class="t">${ms(r.minute) + 60000 <= ms(r.known) ? `revised minute ${hms(r.minute).slice(0, 5)}, already over` : 'counted in the current minute'}</span></li>`;
+  }).join('') : '<li class="t">Waiting for the first revert of an edit seen here: usually a minute or two.</li>';
+  $('#wikis').innerHTML = '<tr><th>Wiki</th><th class="n">Edits</th><th class="n">Bots</th><th class="n">Reverted</th></tr>' +
+    s.wikis.map(w => `<tr><td>${esc(w.wiki)}</td><td class="n">${fmt(w.edits)}</td><td class="n">${Math.round(100 * w.bots / w.edits)}%</td><td class="n">${w.reverted || ''}</td></tr>`).join('');
+}
+
+function drawChart(rows, ghost, revised, k) {
+  const svg = $('#chart'), W = svg.clientWidth || 600, H = 300, top = 16, bottom = 22, left = 34;
+  rows = rows.slice(-30);
+  const g = {}; (ghost || []).forEach(r => g[r.window] = r);
+  const max = Math.max(1, ...rows.map(r => Math.max(r.edits + 10 * r.reverted, g[r.window] ? g[r.window].edits + 10 * g[r.window].reverted : 0)));
+  const y = v => (H - top - bottom) * v / max, bw = (W - left) / Math.max(rows.length, 30);
+  let out = `<text x="0" y="${top + 4}">${fmt(max)}</text><text x="0" y="${H - bottom}">0</text>`;
+  rows.forEach((r, i) => {
+    const x = left + i * bw, base = H - bottom, gh = g[r.window];
+    if (gh) out += `<rect x="${x + 1}" y="${base - y(gh.edits + 10 * gh.reverted)}" width="${bw - 2}" height="${y(gh.edits + 10 * gh.reverted)}" fill="var(--ghost)"/>`;
+    const people = r.edits - r.bots, hb = y(r.bots), hp = y(people), hr = y(10 * r.reverted);
+    const flash = revised[r.window] && revised[r.window] !== seenRevised[r.window] && ms(revised[r.window]) <= k;
+    out += `<g><title>${r.window.slice(11, 16)} UTC: ${r.edits} edits (${r.bots} by bots), ${r.reverted} later reverted${revised[r.window] ? '\nlast revised at ' + hms(revised[r.window]) : ''}</title>
+      <rect x="${x + 1}" y="${base - hb}" width="${bw - 2}" height="${hb}" fill="var(--bot)"/>
+      <rect x="${x + 1}" y="${base - hb - hp}" width="${bw - 2}" height="${hp}" fill="var(--human)"/>
+      <rect x="${x + 1}" y="${base - hb - hp - hr}" width="${bw - 2}" height="${hr}" fill="var(--rev)"/>
+      ${flash ? `<rect class="flash" x="${x}" y="${base - hb - hp - hr - 1}" width="${bw}" height="${hb + hp + hr + 1}" fill="none"/>` : ''}</g>`;
+    if (i % 5 === 0) out += `<text x="${x}" y="${H - 6}">${r.window.slice(11, 16)}</text>`;
+  });
+  svg.innerHTML = out;
+  if (live) seenRevised = {...revised};
+  $('#ghostkey').hidden = !ghost;
+}
+
+async function tick() {
+  try {
+    const s = await load();
+    nowState = s.waiting || s.error ? nowState : s;
+    if (live) render(s);
+  } catch (e) { $('#status').innerHTML = '<span class="err">server unreachable</span>'; }
+}
+
+let debounce = null;
+$('#slider').addEventListener('input', e => {
+  if (!range) return;
+  live = +e.target.value === 1000;
+  clearTimeout(debounce);
+  debounce = setTimeout(async () => {
+    if (live) return tick();
+    render(await load(iso(range[0] + (range[1] - range[0]) * e.target.value / 1000)));
+  }, 120);
+});
+$('#live').onclick = () => { live = true; $('#slider').value = 1000; tick(); };
+
+$('.presets').innerHTML = ['per_minute', 'wikis', 'explain per_minute', 'show'].map(p => `<button type="button">${p}</button>`).join('') +
+  '<button type="button" data-k="1">per_minute known_at 5 min ago</button>';
+$('.presets').onclick = e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  $('#q').value = e.target.dataset.k ? `per_minute known_at ${iso(Date.now() - 300000)}` : e.target.textContent;
+  $('#query').requestSubmit();
+};
+$('#query').onsubmit = async e => {
+  e.preventDefault();
+  const out = await (await fetch('/api/query', {method: 'POST', body: $('#q').value})).json();
+  $('#result').innerHTML = (Array.isArray(out) ? out : [out]).map(m =>
+    m.rows ? `<table><tr>${m.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr>` +
+      m.rows.slice(-200).map(row => `<tr>${row.map(v => `<td>${esc(v ?? 'null')}</td>`).join('')}</tr>`).join('') +
+      `</table><p class="note">${m.rows.length} rows at commit ${m.commit}</p>`
+    : m.text ? `<pre>${esc(m.text)}</pre>` : m.error ? `<p class="err">${esc(m.error)}</p>` : '').join('');
+};
+
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
