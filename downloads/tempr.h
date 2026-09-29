@@ -189,6 +189,10 @@ typedef struct {
                                  excludes plans, results, stack/allocator
                                  overhead */
   int64_t max_operator_bytes; /* aggregate state and materialised views */
+  /* Names of distinct symbols, each stored once plus a NUL; rows hold 8-byte
+   * ids. Symbols are never reclaimed, so allow for every name the engine will
+   * see in its lifetime. Its offsets and hash index add up to about 40 bytes
+   * per symbol, and the whole dictionary counts in max_resident_bytes. */
   int64_t max_symbol_bytes;
   int64_t max_txn_bytes; /* one transaction's staging workspace */
   int64_t max_txn_ops;

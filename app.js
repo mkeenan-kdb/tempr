@@ -541,6 +541,87 @@ correct trades 1 rev 1 {px: 105}`
       + (spec.note ? `<p class="bar-note">${inlineFormat(spec.note)}</p>` : '') + '</figure>\n';
   }
 
+  // --- Line charts: drawn after render at the figure's pixel width, with a hover crosshair ---
+  // spec: {type: 'line', title, unit, xLabel: 'hours', series: [{name, color, points: [[x, y]]}], refs: [{value, label}], log, marks, note}
+  function drawLineCharts(root) {
+    root.querySelectorAll('figure.linechart').forEach(fig => {
+      const spec = JSON.parse(fig.dataset.spec);
+      const W = Math.max(300, fig.clientWidth - 2), H = 250;
+      const M = { l: 52, r: 64, t: 12, b: 34 };
+      const all = spec.series.flatMap(s => s.points);
+      const xMax = Math.max(...all.map(p => p[0])) || 1;
+      const minutes = xMax < 1; // short runs read better in minutes
+      const num = v => Number(v).toLocaleString('en-US', { maximumFractionDigits: v < 10 ? 2 : 0 });
+      // Round tick steps (1, 2 or 5 × 10^n) so the axes read as whole numbers.
+      const step = (span, n) => {
+        const raw = span / n, mag = 10 ** Math.floor(Math.log10(raw));
+        return [1, 2, 5, 10].map(k => k * mag).find(k => k >= raw);
+      };
+      const refs = spec.refs || [];
+      const yTop = Math.max(...all.map(p => p[1]), ...refs.map(r => r.value));
+      let y, yTicks;
+      if (spec.log) { // powers of two: the histogram buckets themselves
+        const lo = Math.floor(Math.log2(Math.max(1e-3, Math.min(...all.map(p => p[1]).concat(refs.map(r => r.value)).filter(v => v > 0))))) - 1, hi = Math.ceil(Math.log2(yTop));
+        y = v => H - M.b - ((Math.log2(Math.max(v, 2 ** lo)) - lo) / Math.max(1, hi - lo)) * (H - M.t - M.b);
+        yTicks = [];
+        for (let e = lo; e <= hi; e += Math.max(1, Math.ceil((hi - lo) / 5))) yTicks.push(2 ** e);
+      } else {
+        const dy = step(yTop, 4);
+        const yMax = Math.ceil(yTop / dy) * dy || 1;
+        y = v => H - M.b - (v / yMax) * (H - M.t - M.b);
+        yTicks = Array.from({ length: Math.round(yMax / dy) + 1 }, (_, i) => i * dy);
+      }
+      const unitX = minutes ? 60 : 1;
+      const dx = step(xMax * unitX, 5) / unitX;
+      const x = v => M.l + (v / xMax) * (W - M.l - M.r);
+      let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(spec.title)}">`;
+      for (const v of yTicks) {
+        svg += `<line class="lc-grid" x1="${M.l}" x2="${W - M.r}" y1="${y(v)}" y2="${y(v)}"/>`
+          + `<text class="lc-tick" x="${M.l - 8}" y="${y(v) + 4}" text-anchor="end">${num(v)}</text>`;
+      }
+      for (let v = 0; v <= xMax + 1e-9; v += dx) {
+        svg += `<text class="lc-tick" x="${x(v)}" y="${H - 10}" text-anchor="middle">${num(v * unitX)} ${minutes ? 'min' : 'h'}</text>`;
+      }
+      for (const t of (spec.marks ? spec.marks.points : [])) {
+        svg += `<line class="lc-mark" x1="${x(t)}" x2="${x(t)}" y1="${H - M.b}" y2="${H - M.b + 5}"><title>${escapeHtml(spec.marks.label)}</title></line>`;
+      }
+      for (const r of refs) { // reference lines: a gate, or the disk's own flush time
+        svg += `<line class="lc-gate" x1="${M.l}" x2="${W - M.r}" y1="${y(r.value)}" y2="${y(r.value)}"/>`
+          + `<text class="lc-tick" x="${M.l + 6}" y="${y(r.value) - 5}">${escapeHtml(r.label)}</text>`;
+      }
+      const ends = [];
+      for (const s of spec.series) {
+        const d = s.points.map((p, i) => `${i ? 'L' : 'M'}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join('');
+        const last = s.points[s.points.length - 1];
+        svg += `<path class="lc-line c${s.color}" d="${d}"/>`
+          + `<circle class="lc-end c${s.color}" cx="${x(last[0])}" cy="${y(last[1])}" r="4"/>`;
+        ends.push({ name: s.name, x: x(last[0]) + 8, y: y(last[1]) + 4 });
+      }
+      // End labels: keep at least 13px apart so converging lines stay readable.
+      ends.sort((a, b) => a.y - b.y).forEach((e, i, list) => { if (i && e.y - list[i - 1].y < 13) e.y = list[i - 1].y + 13; });
+      for (const e of ends) svg += `<text class="lc-label" x="${e.x}" y="${e.y}">${escapeHtml(e.name)}</text>`;
+      svg += `<line class="lc-cross" y1="${M.t}" y2="${H - M.b}" visibility="hidden"/></svg>`;
+      const legend = spec.series.length > 1 ? `<div class="lc-legend">${spec.series.map(s => `<span><i class="c${s.color}"></i>${escapeHtml(s.name)}</span>`).join('')}</div>` : '';
+      fig.innerHTML = `<figcaption><strong>${escapeHtml(spec.title)}</strong><span>${escapeHtml(spec.unit)}</span></figcaption>${legend}
+        <div class="lc-plot">${svg}<div class="lc-tip" hidden></div></div>${spec.note ? `<p class="bar-note">${inlineFormat(spec.note)}</p>` : ''}`;
+      const plot = fig.querySelector('.lc-plot');
+      const cross = fig.querySelector('.lc-cross');
+      const tip = fig.querySelector('.lc-tip');
+      plot.addEventListener('mousemove', e => {
+        const box = plot.getBoundingClientRect();
+        const t = Math.min(xMax, Math.max(0, ((e.clientX - box.left - M.l) / (W - M.l - M.r)) * xMax));
+        const at = spec.series.map(s => [s, s.points.reduce((b, p) => (Math.abs(p[0] - t) < Math.abs(b[0] - t) ? p : b))]);
+        cross.setAttribute('x1', x(t));
+        cross.setAttribute('x2', x(t));
+        cross.setAttribute('visibility', 'visible');
+        tip.hidden = false;
+        tip.innerHTML = `<b>${minutes ? num(t * 60) + ' min' : num(t) + ' h'}</b>` + at.map(([s, p]) => `<span><i class="c${s.color}"></i>${escapeHtml(s.name)} ${num(p[1])} ${escapeHtml(spec.unit)}</span>`).join('');
+        tip.style.left = `${Math.min(x(t) + 12, W - 170)}px`;
+      });
+      plot.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; });
+    });
+  }
+
   // --- Math Formatting Engine ---
   function renderMath(expr, displayMode) {
     if (!expr) return '';
@@ -658,7 +739,9 @@ correct trades 1 rev 1 {px: 105}`
         const rawCode = cleanedLines.join('\n');
         const highlighted = syntaxHighlight(rawCode, codeLang);
         const langLabel = codeLang || 'text';
-        const blockHtml = codeLang === 'chart' ? renderBarChart(JSON.parse(rawCode)) : `<div class="code-block-wrapper">
+        const chart = codeLang === 'chart' ? JSON.parse(rawCode) : null;
+        const blockHtml = chart ? (chart.type === 'line'
+          ? `<figure class="linechart" data-spec="${escapeHtml(rawCode)}"></figure>\n` : renderBarChart(chart)) : `<div class="code-block-wrapper">
           <div class="code-header">
             <span>${escapeHtml(langLabel.toUpperCase())}</span>
             <button class="copy-btn" data-code="${escapeHtml(rawCode)}">Copy</button>
@@ -973,6 +1056,7 @@ correct trades 1 rev 1 {px: 105}`
 
     // Attach copy buttons
     attachCopyButtons();
+    drawLineCharts(article);
 
     // Scroll to top of content
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1492,7 +1576,10 @@ AAPL 2      1         5
     let ttResize;
     window.addEventListener('resize', () => {
       clearTimeout(ttResize);
-      ttResize = setTimeout(() => { if (location.hash === '#explorer') renderTimeTravel(); }, 150);
+      ttResize = setTimeout(() => {
+        if (location.hash === '#explorer') renderTimeTravel();
+        else drawLineCharts(document.getElementById('docArticle'));
+      }, 150);
     });
 
     // Route on initial load & hashchange
