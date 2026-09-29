@@ -31,14 +31,14 @@ Full guides, API specifications, and interactive simulators are available on the
 
 ## Performance at a Glance
 
-Recorded on macOS-26.5.2-arm64-arm-64bit, 2026-09-28. VWAP rows: 100,000 Binance ETHBTC trades in batches of 500, median of 3 runs. Join row: 2.5M operations in batches of 1,000.
+Recorded on Apple M2, 2026-09-29. VWAP rows: 100,000 Binance ETHBTC trades in batches of 500, median of 3 runs. Join row: 2.5M operations in batches of 1,000.
 
 | Mode | Throughput / Latency | Description |
 | --- | ---: | --- |
-| **Maintained VWAP** | **11.68M ops/sec** | Append-only streaming aggregation |
-| **Corrections & Retractions** | **9.63M ops/sec** | Mixed stream with amendments and deletes |
-| **Durable Group Commit** | **2.53M ops/sec** | Flushed to the device before acknowledging (1 MB group commit) |
-| **Maintained As-Of Join** | **1.09 ms batch p99** | 2.5M quotes, trades, corrections and deletes; 1.03 s in total |
+| **Maintained VWAP** | **11.73M ops/sec** | Append-only streaming aggregation |
+| **Corrections & Retractions** | **10.37M ops/sec** | Mixed stream with amendments and deletes |
+| **Durable Group Commit** | **2.50M ops/sec** | Flushed to the device before acknowledging (1 MB group commit) |
+| **Maintained As-Of Join** | **0.717 ms batch p99** | 2.5M quotes, trades, corrections and deletes; 0.972 s in total |
 
 *See [Benchmarks](https://mkeenan-kdb.github.io/tempr/#doc/08-benchmarks) for complete methodology, hardware configuration, and comparisons against kdb+, DuckDB, SQLite, Polars, and pandas.*
 
