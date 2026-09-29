@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TR_VERSION "0.1.0"
+#define TR_VERSION "0.2.0"
 /* Runtime version; experimental releases do not promise a stable ABI. */
 const char *tr_version(void);
 
@@ -294,6 +294,10 @@ typedef struct {
   tr_cursor_mode cursor;
   tr_wm_mode watermark;
   uint32_t generation;
+  /* Optional (false by default). A sealed window retires only after
+   * tr_advance_exported covers it, so nothing leaves memory unexported; an
+   * exporter that stops holds sealed windows, and memory grows. */
+  bool export_hold;
 } tr_source_policy;
 
 void tr_source_policy_init(tr_source_policy *p);
@@ -421,6 +425,11 @@ tr_status tr_correct(tr_txn *t, tr_source *s, int64_t id, uint32_t expected_rev,
 tr_status tr_delete(tr_txn *t, tr_source *s, int64_t id, uint32_t expected_rev);
 tr_status tr_advance_watermark(tr_txn *t, tr_source *s, int64_t w_ns);
 tr_status tr_advance_cursor(tr_txn *t, tr_source *s, int64_t c_ns);
+/* Records that every window ending at or before end_ns is exported. It never
+ * moves backwards, and cannot pass tr_source_info's sealed_end
+ * (TR_E_PROGRESS). Logged like any progress, so it survives restarts; with
+ * export_hold it releases those windows to retire. */
+tr_status tr_advance_exported(tr_txn *t, tr_source *s, int64_t end_ns);
 tr_status tr_commit(tr_txn *t, tr_commit_info *info); /* consumes t */
 void tr_abort(tr_txn *t);
 
@@ -437,6 +446,20 @@ typedef struct {
 } tr_table;
 
 void tr_table_free(tr_table *t);
+
+/* Every retained version of every event whose event time is in [lo_ns,
+ * hi_ns), in durable commits: the source's columns (all nullable), then
+ *   _rev Int64, _deleted Bool (a delete: only the id and time columns are
+ *   set), _commit Int64, _known Timestamp (its commit's knowledge time) and
+ *   _until Timestamp (when the next version of that event superseded it; null
+ *   while current).
+ * A version was the known state of its event for knowledge times in
+ * [_known, _until). Rows are sorted by event time, id and commit. This is what
+ * an exporter writes for sealed windows: with it, "as known at K" can be
+ * answered outside tempr after the windows retire. TR_E_HISTORY_UNAVAILABLE
+ * when lo_ns is before tr_source_info's retired_before. */
+tr_status tr_versions(tr_engine *e, tr_source *s, int64_t lo_ns, int64_t hi_ns,
+                      tr_table **out);
 
 typedef enum {
   TR_Q_ALL,    /* every live fact up to the cursor */
@@ -516,7 +539,10 @@ typedef struct {
   int64_t cursor, watermark, retired_before; /* INT64_MIN: none yet */
   uint64_t events, versions, pending;
   uint32_t windows[TR_WIN_RETIRED +
-                   1]; /* retained window records by tr_window_state */
+                   1];  /* retained window records by tr_window_state */
+  int64_t sealed_end;   /* every window ending at or before this has sealed */
+  int64_t exported_end; /* ... and at or before this is exported */
+  int64_t first_window; /* earliest window not retired; INT64_MIN if none */
 } tr_source_info;
 
 typedef struct {

@@ -60,6 +60,7 @@ p.note { color:var(--muted); margin:8px 0 0; max-width:80ch }
       <div class="stat"><b id="nrev">–</b><span>since reverted</span></div>
       <div class="stat"><b id="npast">–</b><span>past minutes revised</span></div>
       <div class="stat"><b id="commit">–</b><span>tempr commits</span></div>
+      <div class="stat"><b id="archived">–</b><span id="archivenote">versions archived</span></div>
     </div>
     <div class="travel">
       <span>As known at <span id="when">—</span></span>
@@ -117,6 +118,11 @@ function render(s) {
     $('#nrev').textContent = fmt(s.total.reverted);
     $('#npast').textContent = fmt(Object.keys(s.revised).length);
     $('#commit').textContent = fmt(s.commits);
+    const a = s.archived;
+    $('#archived').textContent = fmt(a.versions);
+    $('#archivenote').innerHTML = a.error ? `<span class="err">archive: ${esc(a.error)}</span>`
+      : a.through ? `versions archived to ${esc(s.archive)}/, minutes to ${hms(a.through).slice(0, 5)}`
+      : 'versions archived: a minute seals, and is exported, 30 min after it ends';
   }
   drawChart(s.minutes, live ? null : nowState && nowState.minutes, s.revised, ms(s.known_at));
   const k = ms(s.known_at);

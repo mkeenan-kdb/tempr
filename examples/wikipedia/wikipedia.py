@@ -5,6 +5,9 @@
     python3 wikipedia.py --record wiki.jsonl    # ...and keep the events for replay
     python3 wikipedia.py --replay wiki.jsonl    # replay recorded events, as fast as --speed says
 
+Sealed minutes are exported to wikipedia-archive/edits/*.csv with every version of every edit, so the
+history outlives tempr's memory: query it with DuckDB, Polars or anything that reads CSV.
+
 Every Wikimedia wiki reports each edit within a second or two: about twenty a second across all
 of them. Some edits are later reverted, often within minutes, and a second stream reports that.
 tempr counts edits per minute as they arrive, and when an edit is reverted it corrects that edit,
@@ -14,7 +17,7 @@ and lets you look back at what was known at any moment of the last hour.
 Standard library only; needs Python 3.8+ and the tempr binary (the package's bin/tempr is found
 automatically, or pass --tempr).
 """
-import argparse, collections, hashlib, http.server, json, pathlib, queue, subprocess, sys, threading, time
+import argparse, collections, hashlib, http.server, json, pathlib, queue, re, subprocess, sys, threading, time
 import urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
@@ -26,13 +29,15 @@ MIN = 60_000
 LAG, GRACE = 2 * MIN, 30 * MIN  # watermark lag; how long a minute accepts corrections
 
 # A minute window takes new edits until the watermark (two minutes behind) passes its end, accepts
-# reverts for 30 minutes more, then seals, and leaves history an hour later: memory stays bounded.
+# reverts for 30 minutes more, then seals. Every 30 seconds the demo exports sealed minutes to CSV
+# (every version of every edit); with export: hold a minute leaves memory only once exported, an hour
+# after sealing. Memory stays bounded, and the archive keeps everything.
 SCHEMA = """\
 type Edit = {id: Int64, time: Timestamp, wiki: Symbol, bot: Int64, reverted: Int64, bytes: Int64}
 stream edits: Edit {id: id, time: time, window: tumble(1m, origin = UTC_midnight),
   allow_lateness: 0s, correction_grace: 30m, history_after_seal: 1h, future_skew: 1m,
   max_pending: 100000, on_late: reject, on_closed_correction: reject,
-  cursor: knowledge, watermark: explicit}
+  cursor: knowledge, watermark: explicit, export: hold}
 view per_minute = edits |> tumble 1m on time |> group window
   |> aggregate edits = count(), bots = sum(bot), reverted = sum(reverted), bytes = sum(bytes)
 view wikis = edits |> group wiki |> aggregate edits = count(), bots = sum(bot), reverted = sum(reverted)
@@ -142,6 +147,7 @@ class Demo:
         self.revised = {}  # minute -> knowledge time tempr last revised it after the minute ended
         self.known = self.first_known = None
         self.dropped = self.too_late = self.commits = 0
+        self.archived = {'versions': 0, 'files': 0, 'through': None, 'error': None}
         self.rate = collections.deque(maxlen=10)  # (time, edits) per commit, for edits/s
         self.t = Tempr(args.tempr, args.data, self.on_watch)
         if 'stream edits' not in ''.join(m.get('text', '') for m in self.t.ask('show')):
@@ -186,6 +192,8 @@ class Demo:
                     rec.writelines(json.dumps(e, separators=(',', ':')) + '\n' for e in batch)
                     rec.flush()
                 self.apply(batch)
+            if self.commits and self.commits % 30 == 0:
+                self.export()
 
     def apply(self, batch):
         """One transaction: this second's edits and reverts. Knowledge time is the latest event's
@@ -237,6 +245,19 @@ class Demo:
         self.commits += 1
         self.rate.append((time.monotonic(), len(rows)))
 
+    def export(self):
+        """Sealed minutes to the archive: tempr writes every version, then lets them retire."""
+        d = self.args.archive.replace('\\', '\\\\').replace('"', '\\"')
+        for m in self.t.ask(f'export edits to "{d}"'):
+            t = re.match(r'exported (\d+) versions? of \w+, windows .* to (\S+), to ', m.get('text', ''))
+            if t:
+                self.archived['versions'] += int(t[1])
+                self.archived['files'] += 1
+                self.archived['through'] = t[2]
+            elif 'windows to ' in m.get('text', ''):
+                self.archived['through'] = m['text'].split('windows to ')[1].split()[0]
+            self.archived['error'] = m.get('error')
+
     def state(self, known_at=None):
         """What the page shows, as known now or at an earlier knowledge time; all three queries
         at one knowledge time, so a commit between them cannot mix them."""
@@ -255,7 +276,8 @@ class Demo:
         return {'minutes': minutes, 'wikis': wikis[:15], 'total': total,
                 'reverts': list(self.reverts)[-60:], 'revised': self.revised, 'known_at': known_at,
                 'first_known': ts(self.first_known), 'last_known': ts(self.known),
-                'eps': round(eps, 1), 'commits': self.commits, 'too_late': self.too_late,
+                'eps': round(eps, 1), 'commits': self.commits, 'archive': self.args.archive,
+                'archived': self.archived, 'too_late': self.too_late,
                 'replay': bool(self.args.replay)}
 
 
@@ -307,6 +329,8 @@ def main():
     ap.add_argument('--tempr', default=find_tempr(), help='the tempr binary (default: %(default)s)')
     ap.add_argument('--data', default='wikipedia-data', help='tempr data directory (default: %(default)s)')
     ap.add_argument('--port', type=int, default=8000)
+    ap.add_argument('--archive', default='wikipedia-archive',
+                    help='where sealed minutes are exported as CSV (default: %(default)s)')
     g = ap.add_mutually_exclusive_group()
     g.add_argument('--replay', help='JSONL of recorded events instead of the live streams')
     g.add_argument('--record', help='append every event used to this JSONL file')
