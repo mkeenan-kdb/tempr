@@ -7,22 +7,22 @@
       "platform": "Linux ARM64",
       "file": "tempr-0.1.0-linux-arm64.tar.gz",
       "path": "downloads/tempr-0.1.0-linux-arm64.tar.gz",
-      "size": 318138,
-      "sha256": "c05c4144f6a4ce4e88eae2cb23ac0537e55fa226bf01a21a69459fee0a725737"
+      "size": 320983,
+      "sha256": "934df199d0386cafe4dec4a1eefadd924795bbfdf7eb837e6d7d22f9a17852b8"
     },
     {
       "platform": "Linux x86-64",
       "file": "tempr-0.1.0-linux-x86_64.tar.gz",
       "path": "downloads/tempr-0.1.0-linux-x86_64.tar.gz",
-      "size": 309984,
-      "sha256": "1a2de61b4c28d099ff2b48ab2bc9ece4832d30a61593eda0f01a2a638d4d4e08"
+      "size": 312701,
+      "sha256": "09dbe06107251eb77c39e0b66649571db13ec411694c255a91de0024e7d87a46"
     },
     {
       "platform": "macOS ARM64 (Apple Silicon)",
       "file": "tempr-0.1.0-macos-arm64.tar.gz",
       "path": "downloads/tempr-0.1.0-macos-arm64.tar.gz",
-      "size": 294837,
-      "sha256": "4ec8217a5c5470335a7516e11a71bad3b2a2409cd5e284f20d1be9d71d88ab81"
+      "size": 298185,
+      "sha256": "32dd445ed93f49debd38444755de06b8b22897729049f3e82a6b12958a6758a5"
     }
   ]
 }
