@@ -4,6 +4,20 @@
   "binary_downloads_available": true,
   "packages": [
     {
+      "platform": "Linux ARM64",
+      "file": "tempr-0.1.0-linux-arm64.tar.gz",
+      "path": "downloads/tempr-0.1.0-linux-arm64.tar.gz",
+      "size": 318138,
+      "sha256": "c05c4144f6a4ce4e88eae2cb23ac0537e55fa226bf01a21a69459fee0a725737"
+    },
+    {
+      "platform": "Linux x86-64",
+      "file": "tempr-0.1.0-linux-x86_64.tar.gz",
+      "path": "downloads/tempr-0.1.0-linux-x86_64.tar.gz",
+      "size": 309984,
+      "sha256": "1a2de61b4c28d099ff2b48ab2bc9ece4832d30a61593eda0f01a2a638d4d4e08"
+    },
+    {
       "platform": "macOS ARM64 (Apple Silicon)",
       "file": "tempr-0.1.0-macos-arm64.tar.gz",
       "path": "downloads/tempr-0.1.0-macos-arm64.tar.gz",
