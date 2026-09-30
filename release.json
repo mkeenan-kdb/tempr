@@ -1,28 +1,28 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "status": "release",
   "binary_downloads_available": true,
   "packages": [
     {
       "platform": "Linux ARM64",
-      "file": "tempr-0.2.0-linux-arm64.tar.gz",
-      "path": "downloads/tempr-0.2.0-linux-arm64.tar.gz",
-      "size": 355078,
-      "sha256": "c2ffb0a1510c513d82d55c70920e817dcb0760aac66e30cea4b424a128ed2d95"
+      "file": "tempr-0.3.0-linux-arm64.tar.gz",
+      "path": "downloads/tempr-0.3.0-linux-arm64.tar.gz",
+      "size": 401852,
+      "sha256": "002ce67068f1b646b20152315f4c4da0061eb5867c8850fe40ef21a9b76f1f0e"
     },
     {
       "platform": "Linux x86-64",
-      "file": "tempr-0.2.0-linux-x86_64.tar.gz",
-      "path": "downloads/tempr-0.2.0-linux-x86_64.tar.gz",
-      "size": 346007,
-      "sha256": "0302cc621127f70e1e317f341ebd487111b6f478d5e541293e787e44e9ab1d18"
+      "file": "tempr-0.3.0-linux-x86_64.tar.gz",
+      "path": "downloads/tempr-0.3.0-linux-x86_64.tar.gz",
+      "size": 395590,
+      "sha256": "3a4bc071f340dfd83c3c120193b263a3fb676c820d26eac66272a257cf537103"
     },
     {
       "platform": "macOS ARM64 (Apple Silicon)",
-      "file": "tempr-0.2.0-macos-arm64.tar.gz",
-      "path": "downloads/tempr-0.2.0-macos-arm64.tar.gz",
-      "size": 329736,
-      "sha256": "e0e986b3cabd200854c8e7cc1dfa1b72cc64d9ac028ef8432f58c7b18f5c1a1b"
+      "file": "tempr-0.3.0-macos-arm64.tar.gz",
+      "path": "downloads/tempr-0.3.0-macos-arm64.tar.gz",
+      "size": 376013,
+      "sha256": "d54729bb21f285bee9df8332890b5f8639d56086ad8fcb01cd020ada3388d3f8"
     }
   ]
 }

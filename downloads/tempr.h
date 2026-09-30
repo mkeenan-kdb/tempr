@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TR_VERSION "0.2.0"
+#define TR_VERSION "0.3.0"
 /* Runtime version; experimental releases do not promise a stable ABI. */
 const char *tr_version(void);
 
@@ -278,6 +278,12 @@ typedef enum {
   TR_CURSOR_KNOWLEDGE
 } tr_cursor_mode;
 typedef enum { TR_WM_UNSET, TR_WM_EXPLICIT, TR_WM_LATENESS } tr_wm_mode;
+/* Stored history (durable engines only): sealed windows are written as
+ * column files under <wal_dir>/hdb/<source>/, and queries read retired windows
+ * from them. MANUAL: tr_store writes them. AUTO: every checkpoint (explicit or
+ * checkpoint_wal_bytes) also stores them. Either way a sealed window retires
+ * only once stored, so nothing leaves memory unstored. */
+typedef enum { TR_STORE_OFF, TR_STORE_MANUAL, TR_STORE_AUTO } tr_store_mode;
 
 /* Initialise with tr_source_policy_init, then set every field: an unset field
  * is rejected (§3). TR_CURSOR_KNOWLEDGE advances the cursor to each commit's
@@ -298,6 +304,10 @@ typedef struct {
    * tr_advance_exported covers it, so nothing leaves memory unexported; an
    * exporter that stops holds sealed windows, and memory grows. */
   bool export_hold;
+  /* Optional (TR_STORE_OFF by default). A stored source's name must be a
+   * plain file name: letters, digits, '_', '-' and '.', not starting with '.'.
+   */
+  tr_store_mode store;
 } tr_source_policy;
 
 void tr_source_policy_init(tr_source_policy *p);
@@ -312,8 +322,9 @@ tr_status tr_event_get(tr_engine *e, tr_source *s, int64_t id, uint32_t *rev,
                        bool *deleted, tr_cell *row, uint64_t *valid);
 
 /* RETIRED: history_after_seal has passed on the retention clock (knowledge
- * time). The window leaves coverage: its rows leave windowed views without
- * being retracted, and historical queries into it return HISTORY_UNAVAILABLE.
+ * time). The window leaves memory: its rows leave windowed views without
+ * being retracted. Historical queries into it read its stored partition, or
+ * return HISTORY_UNAVAILABLE when the source does not store.
  */
 typedef enum {
   TR_WIN_OPEN = 1,
@@ -327,8 +338,14 @@ typedef enum {
  * expressions even on failure. Nodes join the running graph only when
  * tr_view_create installs them (a graph version boundary). */
 
-/* min, max, first and last are evaluated by scanning a window join's rows;
- * an aggregate node rejects them (retraction would need ordered state). */
+/* All aggregates support corrections/deletions and window joins. Null values
+ * are ignored; count/count_distinct return zero for no nonnull values, other
+ * aggregates return null. Empty groups disappear.
+ * min/max: Int64, Float64, Timestamp or Duration. first/last: any type, by
+ * (source event time, event id), requiring row-level input retaining that time
+ * column. count_distinct: any type (+0 and -0 compare equal). any/all: Bool.
+ * Ordered/distinct aggregate nodes retain counted values or event keys in
+ * operator memory, with expected logarithmic updates; budget for that state. */
 typedef enum {
   TR_AGG_COUNT,
   TR_AGG_SUM,
@@ -337,7 +354,10 @@ typedef enum {
   TR_AGG_MIN,
   TR_AGG_MAX,
   TR_AGG_FIRST,
-  TR_AGG_LAST
+  TR_AGG_LAST,
+  TR_AGG_COUNT_DISTINCT,
+  TR_AGG_ANY,
+  TR_AGG_ALL
 } tr_agg_kind;
 
 typedef struct {
@@ -461,6 +481,33 @@ void tr_table_free(tr_table *t);
 tr_status tr_versions(tr_engine *e, tr_source *s, int64_t lo_ns, int64_t hi_ns,
                       tr_table **out);
 
+typedef struct {
+  int64_t from_ns, to_ns; /* windows stored by this call; INT64_MIN: none */
+  uint64_t versions;
+  uint32_t partitions; /* windows with events; empty windows write nothing */
+} tr_store_info;
+
+/* Writes every sealed window not yet stored, then records that in a commit
+ * (logged, so it survives restarts) that releases those windows to retire.
+ * Each window with events becomes <wal_dir>/hdb/<source>/<start>/, named
+ * like 20260930T120000Z (fractional seconds after a '.' if any), holding:
+ *   one file per column of little endian 8-byte cells, one per version,
+ *   sorted by event time, id and commit: the source's columns (nullable
+ *   except the id and event time, which a delete keeps), then
+ *   tr_versions' _rev, _deleted, _commit, _known and _until, then
+ *   _until_commit (the superseding commit), _visible_commit and
+ *   _visible_known (the first commit, and its knowledge time, at which the
+ *   version was both committed and within the event cursor);
+ *   <column>.valid, an LSB-first bitmap, for each nullable column;
+ *   .d: "TRPT", format 1, window start and length, row count, then each
+ *   column's name, type, nullability and CRC32C of its files, then a CRC32C.
+ * Symbols are ids in the engine's symbols file. Partitions are written to a
+ * temporary directory, synced and renamed, so a crash leaves either nothing
+ * or a whole partition; a retry rewrites it. Partitions do not count towards
+ * max_disk_bytes. Durable engines, outside a transaction, sources whose
+ * store policy is not TR_STORE_OFF. info may be NULL. */
+tr_status tr_store(tr_engine *e, tr_source *s, tr_store_info *info);
+
 typedef enum {
   TR_Q_ALL,    /* every live fact up to the cursor */
   TR_Q_AT,     /* at T: the window containing T up to T, or event_time <= T */
@@ -476,10 +523,38 @@ typedef struct {
   int64_t known_ns;
   bool at_seq; /* select an exact commit sequence instead */
   uint64_t seq;
+  /* Only event times in [from_ns, to_ns), widened to whole windows for the
+   * view's window source. It applies to every source the plan reads except
+   * any a join reads as its right input, which stay whole so matches at the
+   * edges stay exact. With TR_Q_ALL it also reaches retired windows, read
+   * from stored partitions (without a range, TR_Q_ALL covers only windows in
+   * memory, as covered_from reports). */
+  bool range;
+  int64_t from_ns, to_ns;
 } tr_query_spec;
 
+/* Evaluates the view as of the selected commit. Retired windows are read
+ * from stored partitions; a query needing retired history of a source that
+ * does not store returns HISTORY_UNAVAILABLE. A commit older than the
+ * knowledge cutoff can still be queried when every row it needs is stored;
+ * `at T` is then not checked against that commit's cursor. Plans without
+ * joins evaluate one partition at a time, so max_query_bytes bounds operator
+ * state and one partition, not the whole range; joins read their range at
+ * once. */
 tr_status tr_query(tr_engine *e, tr_view *v, const tr_query_spec *q,
                    tr_table **out);
+
+/* An ad hoc query: evaluates a plan built with tr_node_* like a view that is
+ * never installed, with nothing retained afterwards. The root may also be a
+ * source or view node (a source gives its rows). */
+tr_status tr_query_plan(tr_engine *e, tr_node *root, const tr_query_spec *q,
+                        tr_table **out);
+
+/* Frees an uninstalled plan's nodes: root and its uninstalled inputs, from the
+ * most recently created back, stopping at the first node still installed or
+ * created after them. Use it after tr_query_plan, or to drop a plan that will
+ * not become a view. Installed nodes and view roots are left alone. */
+void tr_node_discard(tr_engine *e, tr_node *root);
 
 /* ---- subscriptions ----
  * A subscription starts from a snapshot at commit N and then receives every
@@ -543,6 +618,9 @@ typedef struct {
   int64_t sealed_end;   /* every window ending at or before this has sealed */
   int64_t exported_end; /* ... and at or before this is exported */
   int64_t first_window; /* earliest window not retired; INT64_MIN if none */
+  /* Stored windows cover [stored_from, stored_end); INT64_MIN from: from the
+   * start. stored_end INT64_MIN: nothing stored yet. */
+  int64_t stored_from, stored_end;
 } tr_source_info;
 
 typedef struct {
