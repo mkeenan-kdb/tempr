@@ -110,13 +110,13 @@ WHERE _known <= TIMESTAMP '2026-09-28 10:03'
 
 ## Performance
 
-Recorded on Apple M2, 2026-09-29, against kdb+, DuckDB, SQLite, Polars and pandas, with every answer checked against an independent reference:
+Recorded on Apple M2, 2026-09-29, against DuckDB, Polars, SQLite and pandas, with every answer checked against an independent reference:
 
 | Test | tempr |
 | --- | ---: |
 | Keeping an as-of join up to date through late quotes, corrections and deletes: slowest 1% of 1,000-operation batches, over 2.5M operations | **0.802 ms** |
 | Live VWAP with corrections and deletes | **10.25M ops/sec** |
-| Live VWAP, append-only | 11.85M ops/sec (kdb+ was faster here) |
+| Live VWAP, append-only | 11.85M ops/sec |
 | Durable, 1 MB group commit | 2.64M ops/sec |
 
 tempr's cost per change stays flat as history grows, which is where it wins most. Where another engine is faster, the [benchmarks page](https://mkeenan-kdb.github.io/tempr/#doc/08-benchmarks) says so, with the method and limits.
