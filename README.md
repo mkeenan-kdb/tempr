@@ -2,7 +2,7 @@
 
 **Live analytics for data that changes.**
 
-[![Release](https://img.shields.io/badge/release-v0.2.0-blue.svg)](https://github.com/mkeenan-kdb/tempr/releases)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/mkeenan-kdb/tempr/releases)
 [![Docs](https://img.shields.io/badge/docs-reference-emerald.svg)](https://mkeenan-kdb.github.io/tempr/)
 
 tempr is a small, embeddable C11 engine. Define a view once, then send it events. It keeps the answer up to date as events arrive late, are corrected or are deleted, and it can tell you what the answer was before each change: `vwap at T known_at K`, "for events up to T, what did we believe at K?"
@@ -37,8 +37,8 @@ It suits workloads where the recent answer must be right now, and cheap to keep 
 Packages for `macos-arm64`, `linux-x86_64` and `linux-arm64` are on the [releases page](https://github.com/mkeenan-kdb/tempr/releases), with `SHA256SUMS`. The Linux packages need glibc 2.34 or later (Ubuntu 22.04+, Debian 12+, RHEL 9+, Amazon Linux 2023).
 
 ```sh
-curl -LO https://github.com/mkeenan-kdb/tempr/releases/download/v0.2.0/tempr-0.2.0-macos-arm64.tar.gz
-tar -xzf tempr-0.2.0-macos-arm64.tar.gz && cd tempr-0.2.0-macos-arm64
+curl -LO https://github.com/mkeenan-kdb/tempr/releases/download/v0.3.0/tempr-0.3.0-macos-arm64.tar.gz
+tar -xzf tempr-0.3.0-macos-arm64.tar.gz && cd tempr-0.3.0-macos-arm64
 ./bin/tempr --help
 ```
 
