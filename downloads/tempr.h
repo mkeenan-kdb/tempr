@@ -389,11 +389,11 @@ tr_status tr_node_zip(tr_engine *e, tr_node *left, tr_node *right,
  * must be row-level (keyed by event identity) and keep its source's event time
  * column; the output keeps the left key, time and window and appends the right
  * columns whose names are new (EQ, ASOF) or the aggregates (WINDOW).
- *   EQ:     the right row keyed by the join columns: a lookup (kdb lj, ij).
+ *   EQ:     the right row keyed by the join columns: a lookup.
  *   ASOF:   the right row with the greatest time <= the left time, ties to the
- *           greatest right id (kdb aj).
- *   WINDOW: aggregates of right rows with time in [left + lo, left + hi]
- *           (kdb wj1); every left row is kept.
+ *           greatest right id.
+ *   WINDOW: aggregates of right rows with time in [left + lo, left + hi];
+ *           every left row is kept.
  * ASOF and WINDOW read each side's source event time and need a row-level
  * right input. Outer joins (the default) give null right columns when nothing
  * matches. A right change that would alter an output row whose left window
